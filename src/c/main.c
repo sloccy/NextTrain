@@ -7,9 +7,10 @@
 #include "win_arrivals.h"
 
 // AppMessage inbox/outbox sizes.
-// Inbox: large enough for one stations chunk (~600B data + dictionary overhead)
+// Inbox: sized for one stations chunk. Emery supports up to 8192B; 4096 gives
+// ~50% headroom over the 3500B payload + ~50B tuple/dict overhead per chunk.
 // Outbox: queries are small (~200B max)
-#define INBOX_SIZE  700
+#define INBOX_SIZE  4096
 #define OUTBOX_SIZE 256
 
 // ─── Background prefetch ──────────────────────────────────────────────────────
