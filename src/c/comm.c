@@ -3,6 +3,10 @@
 #include <string.h>
 #include <stdlib.h>
 
+// ─── Inbox size (set by main.c after app_message_open) ───────────────────────
+
+static uint32_t s_inbox_size = 0;
+
 // ─── Outbound queue ───────────────────────────────────────────────────────────
 
 #define QUEUE_SIZE 24
@@ -44,10 +48,11 @@ static void prv_parse_arrivals_payload(ArrivalCache *cache,
 
 // ─── Init / Deinit ────────────────────────────────────────────────────────────
 
-void comm_init(void) {
+void comm_init(uint32_t inbox_size) {
+  s_inbox_size = inbox_size;
   memset(s_queue, 0, sizeof(s_queue));
   s_sending = false;
-  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] init");
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] init inbox_size=%lu", (unsigned long)inbox_size);
 }
 
 void comm_deinit(void) {
@@ -121,7 +126,7 @@ static void prv_send_next(void) {
   dict_write_uint8(iter, MESSAGE_KEY_OP, entry->op);
   dict_write_uint8(iter, MESSAGE_KEY_QUERY_INDEX, entry->index);
   if (entry->op == OP_GET_STATIONS_FULL)
-    dict_write_uint32(iter, MESSAGE_KEY_INBOX_SIZE, (uint32_t)app_message_inbox_size_maximum());
+    dict_write_uint32(iter, MESSAGE_KEY_INBOX_SIZE, s_inbox_size);
   if (entry->station[0])
     dict_write_cstring(iter, MESSAGE_KEY_QUERY_STATION, entry->station);
   if (entry->routes[0])

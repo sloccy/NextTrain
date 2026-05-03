@@ -44,14 +44,28 @@ static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason,
 
 static void prv_init(void) {
   state_init();
-  comm_init();
 
-  // Open AppMessage
+  // Open AppMessage with sized buffers before comm_init so comm can report the
+  // actual inbox capacity to JS (used as the stations-chunk size hint).
+  // 4096: fits the largest receive (a stations chunk + dict overhead).
+  // 256:  fits the largest send (OP_GET_ARRIVALS with slug+routes, ~140 B).
+  const uint32_t inbox  = 4096;
+  const uint32_t outbox = 256;
   app_message_register_inbox_received(prv_inbox_received);
   app_message_register_inbox_dropped(prv_inbox_dropped);
   app_message_register_outbox_sent(prv_outbox_sent);
   app_message_register_outbox_failed(prv_outbox_failed);
-  app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
+  AppMessageResult r = app_message_open(inbox, outbox);
+  if (r != APP_MSG_OK) {
+    APP_LOG(APP_LOG_LEVEL_ERROR,
+            "[main] app_message_open(%lu,%lu) failed: %d",
+            (unsigned long)inbox, (unsigned long)outbox, (int)r);
+  } else {
+    APP_LOG(APP_LOG_LEVEL_INFO,
+            "[main] app_message_open(%lu,%lu) OK", (unsigned long)inbox, (unsigned long)outbox);
+  }
+
+  comm_init(inbox);
 
   // Push home first — renders immediately from persist
   win_home_push();

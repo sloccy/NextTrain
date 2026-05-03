@@ -9,7 +9,7 @@ typedef void (*ArrivalReceivedCb)(uint8_t query_index, const ArrivalCache *cache
 typedef void (*StationsReadyCb)(void);
 typedef void (*StatusReceivedCb)(uint8_t query_index, CommStatus status);
 
-void comm_init(void);
+void comm_init(uint32_t inbox_size);
 void comm_deinit(void);
 
 void comm_set_arrivals_callback(ArrivalReceivedCb cb);
