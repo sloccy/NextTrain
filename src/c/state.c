@@ -6,6 +6,10 @@ static bool prv_parse_blob(const uint8_t *data, uint32_t size);
 
 #define CHUNK_SIZE 256
 
+// Persist quota is ~4KB per app. Favorites (≤16 × 105B) consume ~1.7KB plus
+// per-key metadata; this leaves ~2KB safely available for the stations subset.
+#define FAVORITE_SUBSET_MAX_SIZE 2048
+
 // ─── Module-level singletons ─────────────────────────────────────────────────
 
 static StationsCache s_stations = {0};
@@ -58,22 +62,8 @@ uint32_t state_get_persisted_stations_version(void) {
       ? (uint32_t)persist_read_int(PERSIST_KEY_STATIONS_VERSION) : 0;
 }
 
-void state_persist_stations_blob(const uint8_t *blob, uint32_t size) {
-  persist_write_int(PERSIST_KEY_STATIONS_VERSION, 0); // clear until fully written
-  persist_write_int(PERSIST_KEY_STATIONS_BLOB_SIZE, (int)size);
-
-  uint32_t offset = 0;
-  for (int key = PERSIST_KEY_STATIONS_CHUNK_BASE; offset < size; key++) {
-    uint32_t chunk = size - offset;
-    if (chunk > CHUNK_SIZE) chunk = CHUNK_SIZE;
-    persist_write_data(key, blob + offset, (size_t)chunk);
-    offset += chunk;
-  }
-
-  // Write version last — presence of a valid version means the blob is complete
-  uint32_t version = ((uint32_t)blob[0] << 24) | ((uint32_t)blob[1] << 16)
-                   | ((uint32_t)blob[2] << 8)  | blob[3];
-  persist_write_int(PERSIST_KEY_STATIONS_VERSION, (int)version);
+bool state_load_stations_from_buffer(const uint8_t *blob, uint32_t size) {
+  return prv_parse_blob(blob, size);
 }
 
 bool state_load_stations_from_persist(void) {
@@ -81,7 +71,7 @@ bool state_load_stations_from_persist(void) {
   if (!persist_exists(PERSIST_KEY_STATIONS_BLOB_SIZE)) return false;
 
   uint32_t size = (uint32_t)persist_read_int(PERSIST_KEY_STATIONS_BLOB_SIZE);
-  if (size == 0 || size > 16384) return false;
+  if (size == 0 || size > FAVORITE_SUBSET_MAX_SIZE) return false;
 
   uint8_t *blob = malloc(size);
   if (!blob) return false;
@@ -91,14 +81,133 @@ bool state_load_stations_from_persist(void) {
     uint32_t chunk = size - offset;
     if (chunk > CHUNK_SIZE) chunk = CHUNK_SIZE;
     int read = persist_read_data(key, blob + offset, (size_t)chunk);
-    if (read < 0) { free(blob); return false; }
+    if (read < 0 || (uint32_t)read != chunk) {
+      APP_LOG(APP_LOG_LEVEL_ERROR,
+              "[state] persist_read_data short/failed key=%d expected=%lu got=%d",
+              key, (unsigned long)chunk, read);
+      free(blob);
+      return false;
+    }
     offset += (uint32_t)read;
-    if ((uint32_t)read < chunk) break;
   }
 
   bool ok = prv_parse_blob(blob, size);
   free(blob);
   return ok;
+}
+
+// Build a subset blob containing only stations referenced by current favorites,
+// in the same wire format as the full blob (so prv_parse_blob handles both).
+// The full 9KB+ stations blob exceeds Pebble's 4KB per-app persist quota, so
+// we persist only the user-visible subset — "as many favorite stations as fit."
+void state_persist_favorite_stations(void) {
+  if (!s_stations.valid) {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "[state] persist_favorites: stations cache invalid");
+    return;
+  }
+
+  uint8_t *buf = malloc(FAVORITE_SUBSET_MAX_SIZE);
+  if (!buf) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[state] persist_favorites: malloc failed");
+    return;
+  }
+
+  uint32_t off = 0;
+
+  // Header: u32 generated_at + u16 station_count (count patched at end)
+  uint32_t g = s_stations.generated_at;
+  buf[off++] = (g >> 24) & 0xFF;
+  buf[off++] = (g >> 16) & 0xFF;
+  buf[off++] = (g >>  8) & 0xFF;
+  buf[off++] =  g        & 0xFF;
+  uint32_t count_off = off;
+  buf[off++] = 0; buf[off++] = 0;
+
+  uint16_t count = 0;
+  const char *seen[MAX_FAVORITES];
+  uint8_t seen_count = 0;
+
+  for (uint8_t f = 0; f < s_favorite_count; f++) {
+    const char *slug = s_favorites[f].station_slug;
+
+    bool dup = false;
+    for (uint8_t i = 0; i < seen_count; i++) {
+      if (strcmp(seen[i], slug) == 0) { dup = true; break; }
+    }
+    if (dup) continue;
+    seen[seen_count++] = slug;
+
+    const Station *st = state_find_station(slug);
+    if (!st) continue;
+
+    // Compute encoded size for this station up-front so we can stop cleanly
+    uint32_t need = 1 + strlen(st->slug)
+                  + 1 + strlen(st->name)
+                  + 1; // route_count
+    for (uint8_t r = 0; r < st->route_count; r++) {
+      need += 3                              // color rgb
+            + 1 + strlen(st->routes[r].route)
+            + 1                              // dir
+            + 1 + strlen(st->routes[r].headsign);
+    }
+
+    if (off + need > FAVORITE_SUBSET_MAX_SIZE) {
+      APP_LOG(APP_LOG_LEVEL_INFO,
+              "[state] subset full at %u stations, skipping rest", (unsigned)count);
+      break;
+    }
+
+    uint8_t sl = (uint8_t)strlen(st->slug);
+    buf[off++] = sl; memcpy(buf + off, st->slug, sl); off += sl;
+
+    uint8_t nl = (uint8_t)strlen(st->name);
+    buf[off++] = nl; memcpy(buf + off, st->name, nl); off += nl;
+
+    buf[off++] = st->route_count;
+
+    for (uint8_t r = 0; r < st->route_count; r++) {
+      const StationRoute *rt = &st->routes[r];
+      buf[off++] = rt->r; buf[off++] = rt->g; buf[off++] = rt->b;
+
+      uint8_t rl = (uint8_t)strlen(rt->route);
+      buf[off++] = rl; memcpy(buf + off, rt->route, rl); off += rl;
+
+      buf[off++] = (uint8_t)rt->dir;
+
+      uint8_t hl = (uint8_t)strlen(rt->headsign);
+      buf[off++] = hl; memcpy(buf + off, rt->headsign, hl); off += hl;
+    }
+
+    count++;
+  }
+
+  buf[count_off    ] = (count >> 8) & 0xFF;
+  buf[count_off + 1] =  count       & 0xFF;
+
+  // Persist: clear version first so a partial write isn't readable on next boot
+  persist_write_int(PERSIST_KEY_STATIONS_VERSION, 0);
+  persist_write_int(PERSIST_KEY_STATIONS_BLOB_SIZE, (int)off);
+
+  uint32_t key_off = 0;
+  for (int key = PERSIST_KEY_STATIONS_CHUNK_BASE; key_off < off; key++) {
+    uint32_t chunk = off - key_off;
+    if (chunk > CHUNK_SIZE) chunk = CHUNK_SIZE;
+    status_t s = persist_write_data(key, buf + key_off, (size_t)chunk);
+    if (s < 0) {
+      APP_LOG(APP_LOG_LEVEL_ERROR,
+              "[state] persist_write_data key=%d failed: %d", key, (int)s);
+      free(buf);
+      return; // version stays 0 → next load fails → triggers full re-sync
+    }
+    key_off += chunk;
+  }
+
+  persist_write_int(PERSIST_KEY_STATIONS_VERSION, (int)g);
+  APP_LOG(APP_LOG_LEVEL_INFO,
+          "[state] persisted %u favorite stations (%lu bytes)",
+          (unsigned)count, (unsigned long)off);
+
+  free(buf);
 }
 
 // ─── Blob parser ─────────────────────────────────────────────────────────────
@@ -191,6 +300,7 @@ void state_add_favorite(const Favorite *fav) {
                      fav, sizeof(Favorite));
   s_favorite_count++;
   persist_write_int(PERSIST_KEY_FAVORITES_COUNT, s_favorite_count);
+  state_persist_favorite_stations();
 }
 
 void state_remove_favorite(uint8_t index) {
@@ -207,6 +317,7 @@ void state_remove_favorite(uint8_t index) {
   persist_write_int(PERSIST_KEY_FAVORITES_COUNT, s_favorite_count);
   // Clear the now-invalid last slot in persist
   persist_delete(PERSIST_KEY_FAVORITES_BASE + s_favorite_count);
+  state_persist_favorite_stations();
 }
 
 void state_swap_favorites(uint8_t a, uint8_t b) {

@@ -275,14 +275,17 @@ static void prv_handle_stations_chunk(DictionaryIterator *iter) {
   if (s_recv_chunks == s_total_chunks) {
     APP_LOG(APP_LOG_LEVEL_INFO, "[comm] all chunks received, blob=%lu bytes",
             (unsigned long)s_blob_used);
-    state_persist_stations_blob(s_blob, s_blob_used);
+    bool ok = state_load_stations_from_buffer(s_blob, s_blob_used);
     free(s_blob); s_blob = NULL;
-    if (state_load_stations_from_persist()) {
-      APP_LOG(APP_LOG_LEVEL_INFO, "[comm] stations loaded from persist, sta_cb=%s",
+    if (ok) {
+      APP_LOG(APP_LOG_LEVEL_INFO, "[comm] stations parsed from RAM, sta_cb=%s",
               s_sta_cb ? "SET" : "NULL");
+      // Persist a favorites-only subset for fast cold-start render. The full
+      // blob can't fit in Pebble's 4KB per-app persist quota.
+      state_persist_favorite_stations();
       if (s_sta_cb) s_sta_cb();
     } else {
-      APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] persist load FAILED after full sync!");
+      APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] stations parse FAILED after full sync!");
     }
   }
 }

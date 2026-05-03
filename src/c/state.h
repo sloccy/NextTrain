@@ -85,8 +85,9 @@ void state_deinit(void);
 // Stations
 StationsCache *state_get_stations(void);
 uint32_t       state_get_persisted_stations_version(void);
-void           state_persist_stations_blob(const uint8_t *blob, uint32_t size);
+bool           state_load_stations_from_buffer(const uint8_t *blob, uint32_t size);
 bool           state_load_stations_from_persist(void);
+void           state_persist_favorite_stations(void);
 void           state_free_stations(void);
 
 // Favorites
