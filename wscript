@@ -30,4 +30,4 @@ def build(ctx):
     ctx.pbl_bundle(binaries=binaries,
                    js=ctx.path.ant_glob(['src/pkjs/**/*.js',
                                          'src/pkjs/**/*.json']),
-                   js_entry_file='src/pkjs/index.js')
+                   js_entry_file='src/pkjs/app.js')
