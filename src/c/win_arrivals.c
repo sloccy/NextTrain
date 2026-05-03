@@ -205,20 +205,29 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
     memset(&fav, 0, sizeof(fav));
     strncpy(fav.station_slug, s_params.station_slug, sizeof(fav.station_slug) - 1);
 
-    // Parse routes string "A:E,B:N" back into Favorite.routes
-    char routes_copy[64];
-    strncpy(routes_copy, s_params.routes, sizeof(routes_copy) - 1);
-    routes_copy[sizeof(routes_copy) - 1] = '\0';
-    char *tok = strtok(routes_copy, ",");
-    while (tok && fav.route_count < MAX_FAV_ROUTES) {
-      char *colon = strchr(tok, ':');
-      if (colon) {
-        strncpy(fav.routes[fav.route_count].route, tok,
-                (size_t)(colon - tok) < 4 ? (size_t)(colon - tok) : 3);
+    // Parse routes string "A:E,B:N" back into Favorite.routes.
+    // Hand-rolled walker — no strtok, no buffer copy.
+    const char *p = s_params.routes;
+    while (*p && fav.route_count < MAX_FAV_ROUTES) {
+      const char *seg_end = p;
+      while (*seg_end && *seg_end != ',') seg_end++;
+
+      const char *colon = p;
+      while (colon < seg_end && *colon != ':') colon++;
+
+      // Need ':' with at least one char before and after.
+      if (colon > p && colon + 1 < seg_end) {
+        size_t name_len = (size_t)(colon - p);
+        if (name_len > sizeof(fav.routes[0].route) - 1)
+          name_len = sizeof(fav.routes[0].route) - 1;
+        memcpy(fav.routes[fav.route_count].route, p, name_len);
+        fav.routes[fav.route_count].route[name_len] = '\0';
         fav.routes[fav.route_count].dir = *(colon + 1);
         fav.route_count++;
       }
-      tok = strtok(NULL, ",");
+
+      p = seg_end;
+      if (*p == ',') p++;
     }
     if (fav.route_count > 0) {
       state_add_favorite(&fav);
