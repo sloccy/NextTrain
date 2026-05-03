@@ -168,7 +168,7 @@ void win_station_picker_push(void) {
 
 // Transient picker state (lives for the duration of this window)
 typedef struct {
-  char slug[24];
+  char slug[40];
   char name[40];
 } RoutePickerCtx;
 

@@ -112,7 +112,7 @@ module.exports.pack = function(data) {
   bytes.push((stations.length >>> 8) & 0xFF, stations.length & 0xFF); // uint16
 
   stations.forEach(function(st) {
-    util.lpStr(bytes, st.k, 23);  // slug
+    util.lpStr(bytes, st.k, 39);  // slug
     util.lpStr(bytes, st.n, 39);  // name
     var routes = st.r || [];
     bytes.push(routes.length & 0xFF);

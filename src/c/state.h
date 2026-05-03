@@ -19,7 +19,7 @@ typedef struct {
 } StationRoute;
 
 typedef struct {
-  char          slug[24];
+  char          slug[40];
   char          name[40];
   uint8_t       route_count;
   StationRoute *routes;   // points into StationsCache.route_pool
@@ -55,7 +55,7 @@ typedef struct {
 // ─── Favorites ───────────────────────────────────────────────────────────────
 
 typedef struct {
-  char    station_slug[24];
+  char    station_slug[40];
   char    station_name[40];
   uint8_t route_count;
   struct {
