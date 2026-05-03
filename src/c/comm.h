@@ -7,7 +7,7 @@
 // Register on window push, clear (pass NULL) on window unload.
 typedef void (*ArrivalReceivedCb)(uint8_t query_index, const ArrivalCache *cache);
 typedef void (*StationsReadyCb)(void);
-typedef void (*StatusReceivedCb)(uint8_t query_index, StatusCode status);
+typedef void (*StatusReceivedCb)(uint8_t query_index, CommStatus status);
 
 void comm_init(void);
 void comm_deinit(void);

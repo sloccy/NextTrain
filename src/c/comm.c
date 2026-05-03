@@ -263,7 +263,7 @@ static void prv_handle_status(DictionaryIterator *iter) {
   if (!st) return;
   uint8_t status      = st->value->uint8;
   uint8_t query_index = qi ? qi->value->uint8 : QUERY_INDEX_TRANSIENT;
-  if (s_status_cb) s_status_cb(query_index, (StatusCode)status);
+  if (s_status_cb) s_status_cb(query_index, (CommStatus)status);
 }
 
 // ─── Arrivals payload parser ──────────────────────────────────────────────────

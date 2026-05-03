@@ -39,7 +39,7 @@ typedef enum {
   STATUS_OFFLINE  = 1,
   STATUS_NO_DATA  = 2,
   STATUS_ERROR    = 3,
-} StatusCode;
+} CommStatus;
 
 // Arrival status codes inside the arrivals payload
 typedef enum {

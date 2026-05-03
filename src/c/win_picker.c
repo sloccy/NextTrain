@@ -198,7 +198,8 @@ static void prv_rte_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   }
   if (!any) return; // nothing selected — ignore
 
-  ArrivalsParams params = {0};
+  ArrivalsParams params;
+  memset(&params, 0, sizeof(params));
   strncpy(params.station_slug, s_rte_ctx->slug, sizeof(params.station_slug) - 1);
   strncpy(params.station_name, s_rte_ctx->name, sizeof(params.station_name) - 1);
   strncpy(params.routes,       routes,          sizeof(params.routes) - 1);

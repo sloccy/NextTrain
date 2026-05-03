@@ -4,7 +4,7 @@
   "longName": "Next Train RTD",
   "companyName": "",
   "versionLabel": "1.0",
-  "sdkVersion": "4",
+  "sdkVersion": "3",
   "targetPlatforms": ["emery"],
   "watchapp": {
     "watchface": false

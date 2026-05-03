@@ -52,7 +52,7 @@ static void prv_arrivals_received(uint8_t query_index, const ArrivalCache *cache
   if (cache->next_refresh) prv_schedule_refresh(cache->next_refresh);
 }
 
-static void prv_status_received(uint8_t query_index, StatusCode status) {
+static void prv_status_received(uint8_t query_index, CommStatus status) {
   if (query_index != s_params.query_index) return;
   s_waiting = false;
   if (s_menu) menu_layer_reload_data(s_menu);
@@ -166,7 +166,8 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   const ArrivalCache *cache = prv_cache();
   if (!s_params.from_favorite && cache && idx->row == cache->count) {
     // "Add to Favorites"
-    Favorite fav = {0};
+    Favorite fav;
+    memset(&fav, 0, sizeof(fav));
     strncpy(fav.station_slug, s_params.station_slug, sizeof(fav.station_slug) - 1);
     strncpy(fav.station_name, s_params.station_name, sizeof(fav.station_name) - 1);
 

@@ -32,7 +32,8 @@ static void prv_launch_favorite(uint8_t index) {
   char routes[64] = {0};
   state_format_routes_query(fav, routes, sizeof(routes));
 
-  ArrivalsParams params = {0};
+  ArrivalsParams params;
+  memset(&params, 0, sizeof(params));
   strncpy(params.station_slug, fav->station_slug, sizeof(params.station_slug) - 1);
   strncpy(params.station_name, fav->station_name, sizeof(params.station_name) - 1);
   strncpy(params.routes,       routes,            sizeof(params.routes) - 1);
