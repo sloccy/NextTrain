@@ -1,0 +1,30 @@
+{
+  "uuid": "a3f2e1d0-b4c5-4d6e-8f7a-9b0c1d2e3f4a",
+  "shortName": "NextTrain",
+  "longName": "Next Train RTD",
+  "companyName": "",
+  "versionLabel": "1.0",
+  "sdkVersion": "4",
+  "targetPlatforms": ["emery"],
+  "watchapp": {
+    "watchface": false
+  },
+  "capabilities": [],
+  "appKeys": {
+    "MSG_OP":               0,
+    "MSG_QUERY_STATION":    1,
+    "MSG_QUERY_ROUTES":     2,
+    "MSG_QUERY_INDEX":      3,
+    "MSG_STATUS":           4,
+    "MSG_DATA_TYPE":        5,
+    "MSG_STATIONS_VERSION": 6,
+    "MSG_CHUNK_INDEX":      7,
+    "MSG_CHUNK_TOTAL":      8,
+    "MSG_PAYLOAD":          9,
+    "MSG_STATION_NAME":     10,
+    "MSG_NEXT_REFRESH":     11
+  },
+  "resources": {
+    "media": []
+  }
+}

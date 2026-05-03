@@ -1,0 +1,109 @@
+#pragma once
+
+#include <pebble.h>
+#include "protocol.h"
+
+#define MAX_FAVORITES          16
+#define MAX_ARRIVALS           10
+#define MAX_STATIONS           100
+#define MAX_ROUTES_PER_STATION 12
+#define MAX_FAV_ROUTES          8
+
+// ─── Stations cache ──────────────────────────────────────────────────────────
+
+typedef struct {
+  uint8_t r, g, b;
+  char    route[4];     // null-terminated, e.g. "A"
+  char    dir;          // 'N','S','E','W'
+  char    headsign[25];
+} StationRoute;
+
+typedef struct {
+  char          slug[24];
+  char          name[40];
+  uint8_t       route_count;
+  StationRoute *routes;   // points into StationsCache.route_pool
+} Station;
+
+typedef struct {
+  uint32_t      generated_at;
+  uint16_t      station_count;
+  Station      *stations;
+  StationRoute *route_pool;
+  bool          valid;
+} StationsCache;
+
+// ─── Arrivals cache (per-favorite slot + one transient slot) ─────────────────
+
+typedef struct {
+  uint8_t       r, g, b;
+  ArrivalStatus status;
+  char          route[4];
+  char          headsign[25];
+  char          time[10];
+  char          label[20];
+} ArrivalEntry;
+
+typedef struct {
+  bool         valid;
+  uint8_t      count;
+  ArrivalEntry entries[MAX_ARRIVALS];
+  uint32_t     next_refresh;
+  char         station_name[40];
+} ArrivalCache;
+
+// ─── Favorites ───────────────────────────────────────────────────────────────
+
+typedef struct {
+  char    station_slug[24];
+  char    station_name[40];
+  uint8_t route_count;
+  struct {
+    char route[4]; // null-terminated
+    char dir;      // 'N','S','E','W'
+  } routes[MAX_FAV_ROUTES];
+} Favorite;
+
+// ─── Persistent storage key allocation ───────────────────────────────────────
+// Key 0       : STATIONS_VERSION (uint32)
+// Key 1       : STATIONS_BLOB_SIZE (uint32) — total byte length of assembled blob
+// Key 2..101  : STATIONS_CHUNK_i (256-byte slices of the blob)
+// Key 200     : FAVORITES_COUNT (uint8)
+// Key 201..216: FAVORITE_i (one Favorite struct each)
+
+#define PERSIST_KEY_STATIONS_VERSION    0
+#define PERSIST_KEY_STATIONS_BLOB_SIZE  1
+#define PERSIST_KEY_STATIONS_CHUNK_BASE 2   // keys 2..101
+#define PERSIST_KEY_FAVORITES_COUNT     200
+#define PERSIST_KEY_FAVORITES_BASE      201 // keys 201..216
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+
+void state_init(void);
+void state_deinit(void);
+
+// Stations
+StationsCache *state_get_stations(void);
+uint32_t       state_get_persisted_stations_version(void);
+void           state_persist_stations_blob(const uint8_t *blob, uint32_t size);
+bool           state_load_stations_from_persist(void);
+void           state_free_stations(void);
+
+// Favorites
+uint8_t    state_get_favorite_count(void);
+Favorite  *state_get_favorite(uint8_t index);
+void       state_add_favorite(const Favorite *fav);
+void       state_remove_favorite(uint8_t index);
+void       state_swap_favorites(uint8_t a, uint8_t b);
+
+// Arrivals cache
+// index: 0..(MAX_FAVORITES-1) for saved slots, QUERY_INDEX_TRANSIENT for search
+ArrivalCache *state_get_arrival_cache(uint8_t index);
+void          state_set_arrival_cache(uint8_t index, const ArrivalCache *cache);
+void          state_clear_arrival_cache(uint8_t index);
+
+// Helpers
+const Station *state_find_station(const char *slug);
+
+// Encode Favorite routes as a comma-separated "route:dir" query string (e.g. "A:N,B:E")
+void state_format_routes_query(const Favorite *fav, char *buf, size_t buf_size);
