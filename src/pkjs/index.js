@@ -37,7 +37,7 @@ var STATUS_NAMES = { 0: 'OK', 1: 'OFFLINE', 2: 'NO_DATA', 3: 'ERROR' };
 
 function sendStatus(queryIndex, code) {
   console.log('[pkjs] sendStatus qi=' + queryIndex + ' code=' + (STATUS_NAMES[code] || code));
-  Pebble.sendAppMessage({ MSG_STATUS: code, MSG_QUERY_INDEX: queryIndex },
+  Pebble.sendAppMessage({ STATUS: code, QUERY_INDEX: queryIndex },
     function() { console.log('[pkjs] sendStatus ACK'); },
     function(e) { console.error('[pkjs] sendStatus FAILED: ' + JSON.stringify(e)); });
 }
@@ -62,8 +62,8 @@ function handleGetStationsVersion() {
       }
       var version = data.g | 0;
       console.log('[pkjs] sending STATIONS_VERSION=' + version);
-      sendDict({ MSG_DATA_TYPE: DATA_TYPE.STATIONS_VERSION,
-                 MSG_STATIONS_VERSION: version },
+      sendDict({ DATA_TYPE: DATA_TYPE.STATIONS_VERSION,
+                 STATIONS_VERSION: version },
                drain);
     });
   });
@@ -99,10 +99,10 @@ function handleGetStationsFull() {
         index++;
         console.log('[pkjs] sending chunk ' + (i+1) + '/' + total + ' (' + (end-start) + 'B)');
         sendDict({
-          MSG_DATA_TYPE:   DATA_TYPE.STATIONS_CHUNK,
-          MSG_CHUNK_INDEX: i,
-          MSG_CHUNK_TOTAL: total,
-          MSG_PAYLOAD:     slice,
+          DATA_TYPE:   DATA_TYPE.STATIONS_CHUNK,
+          CHUNK_INDEX: i,
+          CHUNK_TOTAL: total,
+          PAYLOAD:     slice,
         }, sendChunk);
       }
       sendChunk();
@@ -150,11 +150,11 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
         var buf = arrivalsModule.pack(body.a || [], station, routes);
 
         sendDict({
-          MSG_DATA_TYPE:    DATA_TYPE.ARRIVALS,
-          MSG_QUERY_INDEX:  queryIndex,
-          MSG_STATION_NAME: station.n,
-          MSG_NEXT_REFRESH: (body.n | 0),
-          MSG_PAYLOAD:      buf,
+          DATA_TYPE:    DATA_TYPE.ARRIVALS,
+          QUERY_INDEX:  queryIndex,
+          STATION_NAME: station.n,
+          NEXT_REFRESH: (body.n | 0),
+          PAYLOAD:      buf,
         }, drain);
       };
 
@@ -177,8 +177,8 @@ function handleRefreshStations() {
         sendStatus(0, STATUS.OFFLINE); drain(); return;
       }
       console.log('[pkjs] refresh: load OK, station_count=' + ((data && data.s) ? data.s.length : 0) + ', sending version=0 to force re-sync');
-      sendDict({ MSG_DATA_TYPE: DATA_TYPE.STATIONS_VERSION,
-                 MSG_STATIONS_VERSION: 0 },
+      sendDict({ DATA_TYPE: DATA_TYPE.STATIONS_VERSION,
+                 STATIONS_VERSION: 0 },
                drain);
     });
   });
@@ -196,10 +196,10 @@ Pebble.addEventListener('ready', function() {
 });
 
 Pebble.addEventListener('appmessage', function(e) {
-  var op           = e.payload.MSG_OP;
-  var queryIndex   = e.payload.MSG_QUERY_INDEX !== undefined ? e.payload.MSG_QUERY_INDEX : 0;
-  var stationSlug  = e.payload.MSG_QUERY_STATION || '';
-  var routesStr    = e.payload.MSG_QUERY_ROUTES  || '';
+  var op           = e.payload.OP;
+  var queryIndex   = e.payload.QUERY_INDEX !== undefined ? e.payload.QUERY_INDEX : 0;
+  var stationSlug  = e.payload.QUERY_STATION || '';
+  var routesStr    = e.payload.QUERY_ROUTES  || '';
 
   console.log('[pkjs] op=' + op + ' idx=' + queryIndex + ' sta=' + stationSlug);
 

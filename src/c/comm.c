@@ -118,12 +118,12 @@ static void prv_send_next(void) {
     return;
   }
 
-  dict_write_uint8(iter, MSG_OP, entry->op);
-  dict_write_uint8(iter, MSG_QUERY_INDEX, entry->index);
+  dict_write_uint8(iter, MESSAGE_KEY_OP, entry->op);
+  dict_write_uint8(iter, MESSAGE_KEY_QUERY_INDEX, entry->index);
   if (entry->station[0])
-    dict_write_cstring(iter, MSG_QUERY_STATION, entry->station);
+    dict_write_cstring(iter, MESSAGE_KEY_QUERY_STATION, entry->station);
   if (entry->routes[0])
-    dict_write_cstring(iter, MSG_QUERY_ROUTES, entry->routes);
+    dict_write_cstring(iter, MESSAGE_KEY_QUERY_ROUTES, entry->routes);
 
   result = app_message_outbox_send();
   if (result != APP_MSG_OK) {
@@ -175,8 +175,8 @@ void comm_inbox_dropped(AppMessageResult reason) {
 // ─── Inbox dispatcher ─────────────────────────────────────────────────────────
 
 void comm_inbox_received(DictionaryIterator *iter) {
-  Tuple *dt = dict_find(iter, MSG_DATA_TYPE);
-  Tuple *st = dict_find(iter, MSG_STATUS);
+  Tuple *dt = dict_find(iter, MESSAGE_KEY_DATA_TYPE);
+  Tuple *st = dict_find(iter, MESSAGE_KEY_STATUS);
   APP_LOG(APP_LOG_LEVEL_INFO, "[comm] inbox_received: data_type=%s status=%s",
           dt ? "YES" : "NO", st ? "YES" : "NO");
   if (dt) {
@@ -201,7 +201,7 @@ void comm_inbox_received(DictionaryIterator *iter) {
 // ─── Inbound handlers ─────────────────────────────────────────────────────────
 
 static void prv_handle_stations_version(DictionaryIterator *iter) {
-  Tuple *vt = dict_find(iter, MSG_STATIONS_VERSION);
+  Tuple *vt = dict_find(iter, MESSAGE_KEY_STATIONS_VERSION);
   if (!vt) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] stations_version msg missing version key!");
     return;
@@ -229,9 +229,9 @@ static void prv_handle_stations_version(DictionaryIterator *iter) {
 }
 
 static void prv_handle_stations_chunk(DictionaryIterator *iter) {
-  Tuple *ci = dict_find(iter, MSG_CHUNK_INDEX);
-  Tuple *ct = dict_find(iter, MSG_CHUNK_TOTAL);
-  Tuple *pl = dict_find(iter, MSG_PAYLOAD);
+  Tuple *ci = dict_find(iter, MESSAGE_KEY_CHUNK_INDEX);
+  Tuple *ct = dict_find(iter, MESSAGE_KEY_CHUNK_TOTAL);
+  Tuple *pl = dict_find(iter, MESSAGE_KEY_PAYLOAD);
   if (!ci || !ct || !pl) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] chunk missing keys: ci=%s ct=%s pl=%s",
             ci ? "OK" : "MISSING", ct ? "OK" : "MISSING", pl ? "OK" : "MISSING");
@@ -288,10 +288,10 @@ static void prv_handle_stations_chunk(DictionaryIterator *iter) {
 }
 
 static void prv_handle_arrivals(DictionaryIterator *iter) {
-  Tuple *qi = dict_find(iter, MSG_QUERY_INDEX);
-  Tuple *sn = dict_find(iter, MSG_STATION_NAME);
-  Tuple *nr = dict_find(iter, MSG_NEXT_REFRESH);
-  Tuple *pl = dict_find(iter, MSG_PAYLOAD);
+  Tuple *qi = dict_find(iter, MESSAGE_KEY_QUERY_INDEX);
+  Tuple *sn = dict_find(iter, MESSAGE_KEY_STATION_NAME);
+  Tuple *nr = dict_find(iter, MESSAGE_KEY_NEXT_REFRESH);
+  Tuple *pl = dict_find(iter, MESSAGE_KEY_PAYLOAD);
   if (!qi || !pl) return;
 
   uint8_t query_index  = qi->value->uint8;
@@ -315,8 +315,8 @@ static const char *prv_status_name(CommStatus s) {
 }
 
 static void prv_handle_status(DictionaryIterator *iter) {
-  Tuple *st = dict_find(iter, MSG_STATUS);
-  Tuple *qi = dict_find(iter, MSG_QUERY_INDEX);
+  Tuple *st = dict_find(iter, MESSAGE_KEY_STATUS);
+  Tuple *qi = dict_find(iter, MESSAGE_KEY_QUERY_INDEX);
   if (!st) return;
   uint8_t status      = st->value->uint8;
   uint8_t query_index = qi ? qi->value->uint8 : QUERY_INDEX_TRANSIENT;

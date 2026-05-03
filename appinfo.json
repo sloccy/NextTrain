@@ -11,18 +11,18 @@
   },
   "capabilities": [],
   "appKeys": {
-    "MSG_OP":               0,
-    "MSG_QUERY_STATION":    1,
-    "MSG_QUERY_ROUTES":     2,
-    "MSG_QUERY_INDEX":      3,
-    "MSG_STATUS":           4,
-    "MSG_DATA_TYPE":        5,
-    "MSG_STATIONS_VERSION": 6,
-    "MSG_CHUNK_INDEX":      7,
-    "MSG_CHUNK_TOTAL":      8,
-    "MSG_PAYLOAD":          9,
-    "MSG_STATION_NAME":     10,
-    "MSG_NEXT_REFRESH":     11
+    "OP":               0,
+    "QUERY_STATION":    1,
+    "QUERY_ROUTES":     2,
+    "QUERY_INDEX":      3,
+    "STATUS":           4,
+    "DATA_TYPE":        5,
+    "STATIONS_VERSION": 6,
+    "CHUNK_INDEX":      7,
+    "CHUNK_TOTAL":      8,
+    "PAYLOAD":          9,
+    "STATION_NAME":     10,
+    "NEXT_REFRESH":     11
   },
   "resources": {
     "media": []

@@ -1,22 +1,9 @@
 #pragma once
 
 #include <pebble.h>
-
-// AppMessage key IDs — must match appinfo.json appKeys
-typedef enum {
-  MSG_OP               = 0,
-  MSG_QUERY_STATION    = 1,
-  MSG_QUERY_ROUTES     = 2,
-  MSG_QUERY_INDEX      = 3,
-  MSG_STATUS           = 4,
-  MSG_DATA_TYPE        = 5,
-  MSG_STATIONS_VERSION = 6,
-  MSG_CHUNK_INDEX      = 7,
-  MSG_CHUNK_TOTAL      = 8,
-  MSG_PAYLOAD          = 9,
-  MSG_STATION_NAME     = 10,
-  MSG_NEXT_REFRESH     = 11,
-} MessageKey;
+// AppMessage key IDs — auto-generated from appinfo.json appKeys.
+// Provides MESSAGE_KEY_OP, MESSAGE_KEY_STATUS, MESSAGE_KEY_DATA_TYPE, etc.
+#include "message_keys.auto.h"
 
 // MSG_OP values (watch → phone)
 typedef enum {
