@@ -11,7 +11,7 @@ typedef struct {
   bool    used;
   uint8_t op;
   uint8_t index;
-  char    station[24];
+  char    station[40];
   char    routes[64];
 } QueueEntry;
 
