@@ -72,9 +72,10 @@ function handleGetStationsVersion() {
 // ─── Stations full sync ────────────────────────────────────────────────────────
 
 function handleGetStationsFull(inboxSize) {
-  // Subtract 50B for AppMessage dict/tuple overhead (4 keys: DATA_TYPE, CHUNK_INDEX,
-  // CHUNK_TOTAL, PAYLOAD). Fall back to 500B if the watch didn't report its size.
-  var chunkSize = inboxSize > 100 ? inboxSize - 50 : 500;
+  // Reserve 200B headroom for AppMessage transport+dict overhead. 50B was too
+  // tight: phone sent 4046B chunks into a 4096B inbox and they never arrived.
+  // The previous proven config was 700B inbox / 500B chunks, also 200B slack.
+  var chunkSize = inboxSize > 300 ? inboxSize - 200 : 500;
   console.log('[pkjs] handleGetStationsFull inboxSize=' + inboxSize + ' chunkSize=' + chunkSize);
   enqueue(function() {
     stationsModule.load(WORKER_BASE, function(err, data) {
