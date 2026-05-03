@@ -139,19 +139,20 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
       xhr.timeout = 8000;
 
       xhr.onload = function() {
-        console.log('[pkjs] arrivals xhr status=' + xhr.status + ' len=' + (xhr.responseText ? xhr.responseText.length : 0));
+        var bodyStr = xhr.responseText ? '' + xhr.responseText : '';
+        console.log('[pkjs] arrivals xhr status=' + xhr.status + ' len=' + bodyStr.length);
         if (xhr.status === 503) { sendStatus(queryIndex, STATUS.NO_DATA); drain(); return; }
         if (xhr.status < 200 || xhr.status >= 300) {
-          console.error('[pkjs] arrivals HTTP error: ' + xhr.status);
+          console.error('[pkjs] arrivals HTTP ' + xhr.status + ' body: ' + bodyStr.slice(0, 200));
           sendStatus(queryIndex, STATUS.ERROR); drain(); return;
         }
 
         var body;
         try {
           // '' + coerces STPyV8 JSObject → JS string before JSON.parse (same fix as stations.js)
-          body = JSON.parse('' + xhr.responseText);
+          body = JSON.parse(bodyStr);
         } catch(e) {
-          console.error('[pkjs] arrivals JSON parse error: ' + e.message);
+          console.error('[pkjs] arrivals JSON parse error: ' + e.message + ' body: ' + bodyStr.slice(0, 200));
           sendStatus(queryIndex, STATUS.ERROR); drain(); return;
         }
 
