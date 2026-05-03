@@ -31,6 +31,53 @@ void state_init(void) {
   memset(s_arrival_cache, 0, sizeof(s_arrival_cache));
   s_favorite_count = 0;
 
+  // Schema migration: Favorite lost station_name[40]. Read old layout, write new.
+  uint8_t schema = persist_exists(PERSIST_KEY_SCHEMA_VERSION)
+      ? (uint8_t)persist_read_int(PERSIST_KEY_SCHEMA_VERSION) : 0;
+
+  if (schema < SCHEMA_V_NAMES_DROPPED) {
+    typedef struct {
+      char    station_slug[40];
+      char    station_name[40]; // dropped in SCHEMA_V_NAMES_DROPPED
+      uint8_t route_count;
+      struct { char route[4]; char dir; } routes[MAX_FAV_ROUTES];
+    } FavoriteV0;
+
+    uint8_t count = persist_exists(PERSIST_KEY_FAVORITES_COUNT)
+        ? (uint8_t)persist_read_int(PERSIST_KEY_FAVORITES_COUNT) : 0;
+    if (count > MAX_FAVORITES) count = MAX_FAVORITES;
+
+    for (uint8_t i = 0; i < count; i++) {
+      FavoriteV0 old;
+      memset(&old, 0, sizeof(old));
+      persist_read_data(PERSIST_KEY_FAVORITES_BASE + i, &old, sizeof(old));
+
+      Favorite nw;
+      memset(&nw, 0, sizeof(nw));
+      strncpy(nw.station_slug, old.station_slug, sizeof(nw.station_slug) - 1);
+      nw.route_count = old.route_count;
+      for (uint8_t r = 0; r < nw.route_count && r < MAX_FAV_ROUTES; r++) {
+        strncpy(nw.routes[r].route, old.routes[r].route, sizeof(nw.routes[r].route) - 1);
+        nw.routes[r].dir = old.routes[r].dir;
+      }
+      persist_write_data(PERSIST_KEY_FAVORITES_BASE + i, &nw, sizeof(Favorite));
+    }
+
+    // Wipe the stations subset — it was encoded with the old wire format (had
+    // embedded names) and would be mis-parsed by the updated parser. Force a
+    // clean re-sync from the worker on next boot.
+    persist_write_int(PERSIST_KEY_STATIONS_VERSION, 0);
+    persist_delete(PERSIST_KEY_STATIONS_BLOB_SIZE);
+    for (int k = 0; k < 100; k++) {
+      persist_delete(PERSIST_KEY_STATIONS_CHUNK_BASE + k);
+    }
+
+    persist_write_int(PERSIST_KEY_SCHEMA_VERSION, SCHEMA_V_NAMES_DROPPED);
+    APP_LOG(APP_LOG_LEVEL_INFO,
+            "[state] schema migrated v0→v%d: %u favorites rewritten, stations cache wiped",
+            SCHEMA_V_NAMES_DROPPED, (unsigned)count);
+  }
+
   // Load favorites from persist
   s_favorite_count = persist_exists(PERSIST_KEY_FAVORITES_COUNT)
       ? (uint8_t)persist_read_int(PERSIST_KEY_FAVORITES_COUNT) : 0;
@@ -51,6 +98,7 @@ void state_free_stations(void) {
   if (s_stations.stations)  { free(s_stations.stations);  s_stations.stations  = NULL; }
   if (s_stations.route_pool) { free(s_stations.route_pool); s_stations.route_pool = NULL; }
   s_stations.valid = false;
+  s_stations.is_full = false;
 }
 
 StationsCache *state_get_stations(void) {
@@ -63,7 +111,9 @@ uint32_t state_get_persisted_stations_version(void) {
 }
 
 bool state_load_stations_from_buffer(const uint8_t *blob, uint32_t size) {
-  return prv_parse_blob(blob, size);
+  bool ok = prv_parse_blob(blob, size);
+  if (ok) s_stations.is_full = true;
+  return ok;
 }
 
 bool state_load_stations_from_persist(void) {
@@ -142,7 +192,6 @@ void state_persist_favorite_stations(void) {
 
     // Compute encoded size for this station up-front so we can stop cleanly
     uint32_t need = 1 + strlen(st->slug)
-                  + 1 + strlen(st->name)
                   + 1; // route_count
     for (uint8_t r = 0; r < st->route_count; r++) {
       need += 3                              // color rgb
@@ -159,9 +208,6 @@ void state_persist_favorite_stations(void) {
 
     uint8_t sl = (uint8_t)strlen(st->slug);
     buf[off++] = sl; memcpy(buf + off, st->slug, sl); off += sl;
-
-    uint8_t nl = (uint8_t)strlen(st->name);
-    buf[off++] = nl; memcpy(buf + off, st->name, nl); off += nl;
 
     buf[off++] = st->route_count;
 
@@ -219,7 +265,7 @@ static bool prv_parse_blob(const uint8_t *data, uint32_t size) {
   uint32_t max_routes = 0;
   uint32_t pool_idx   = 0;
   uint16_t i;
-  uint8_t  j, sl, nl, rl, hl, copy;
+  uint8_t  j, sl, rl, hl, copy;
 
   #define NEED(n) if (p + (n) > end) goto fail
 
@@ -247,10 +293,6 @@ static bool prv_parse_blob(const uint8_t *data, uint32_t size) {
     NEED(1); sl = *p++;
     NEED(sl); copy = sl < sizeof(st->slug) - 1 ? sl : sizeof(st->slug) - 1;
     memcpy(st->slug, p, copy); st->slug[copy] = 0; p += sl;
-
-    NEED(1); nl = *p++;
-    NEED(nl); copy = nl < sizeof(st->name) - 1 ? nl : sizeof(st->name) - 1;
-    memcpy(st->name, p, copy); st->name[copy] = 0; p += nl;
 
     NEED(1); st->route_count = *p++;
     st->routes = &s_stations.route_pool[pool_idx];
@@ -368,4 +410,18 @@ void state_format_routes_query(const Favorite *fav, char *buf, size_t buf_size) 
     if (i > 0) strncat(buf, ",", buf_size - strlen(buf) - 1);
     strncat(buf, part, buf_size - strlen(buf) - 1);
   }
+}
+
+void slug_to_display(const char *slug, char *out, size_t n) {
+  if (n == 0) return;
+  size_t o = 0;
+  bool word_start = true;
+  for (size_t i = 0; slug[i] && o + 1 < n; i++) {
+    char c = slug[i];
+    if (c == '_') { out[o++] = ' '; word_start = true; continue; }
+    if (word_start && c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+    out[o++] = c;
+    word_start = false;
+  }
+  out[o] = '\0';
 }

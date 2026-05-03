@@ -4,7 +4,6 @@
 
 typedef struct {
   char    station_slug[40];
-  char    station_name[40];
   char    routes[64];       // "A:E,B:N"
   uint8_t query_index;      // favorite slot or QUERY_INDEX_TRANSIENT
   bool    from_favorite;    // false → show "Add to Favorites"

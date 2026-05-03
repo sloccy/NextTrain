@@ -22,7 +22,6 @@
     "CHUNK_INDEX":      7,
     "CHUNK_TOTAL":      8,
     "PAYLOAD":          9,
-    "STATION_NAME":     10,
     "NEXT_REFRESH":     11
   },
   "resources": {

@@ -70,8 +70,10 @@ static void prv_draw_header(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, GColorWhite);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
+  char display_name[40];
+  slug_to_display(s_params.station_slug, display_name, sizeof(display_name));
   graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_draw_text(ctx, s_params.station_name,
+  graphics_draw_text(ctx, display_name,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(0, 2, bounds.size.w, HEADER_HEIGHT - 4),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
@@ -187,13 +189,21 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
                      hs_r, GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
 }
 
+static void prv_dismiss_to_home(void *ctx) {
+  // Navigation depth in search mode: home → station picker → route picker → arrivals.
+  // Remove the two pickers silently then animate arrivals off so it looks like
+  // a clean return to home.
+  window_stack_pop(false);  // arrivals
+  window_stack_pop(false);  // route picker
+  window_stack_pop(true);   // station picker → home
+}
+
 static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   if (!s_params.from_favorite && idx->row == prv_add_fav_row()) {
     // "Add to Favorites"
     Favorite fav;
     memset(&fav, 0, sizeof(fav));
     strncpy(fav.station_slug, s_params.station_slug, sizeof(fav.station_slug) - 1);
-    strncpy(fav.station_name, s_params.station_name, sizeof(fav.station_name) - 1);
 
     // Parse routes string "A:E,B:N" back into Favorite.routes
     char routes_copy[64];
@@ -212,10 +222,8 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
     }
     if (fav.route_count > 0) {
       state_add_favorite(&fav);
-      s_params.from_favorite = true;
-      s_params.query_index   = state_get_favorite_count() - 1;
-      menu_layer_reload_data(s_menu);
       win_home_reload();
+      app_timer_register(0, prv_dismiss_to_home, NULL);
     }
   }
 }

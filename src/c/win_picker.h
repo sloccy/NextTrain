@@ -8,4 +8,4 @@ void win_station_picker_push(void);
 
 // Route picker: push a multi-select list of routes for the given station slug.
 // On confirm, pushes win_arrivals with the selection.
-void win_route_picker_push(const char *station_slug, const char *station_name);
+void win_route_picker_push(const char *station_slug);

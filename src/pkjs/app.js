@@ -71,7 +71,7 @@ function handleGetStationsVersion() {
 
 // ─── Stations full sync ────────────────────────────────────────────────────────
 
-var CHUNK_SIZE = 500; // bytes per AppMessage chunk
+var CHUNK_SIZE = 3500; // bytes per AppMessage chunk (Emery inbox is 4096B)
 
 function handleGetStationsFull() {
   console.log('[pkjs] handleGetStationsFull');
@@ -166,7 +166,6 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
         sendDict({
           DATA_TYPE:    DATA_TYPE.ARRIVALS,
           QUERY_INDEX:  queryIndex,
-          STATION_NAME: station.n,
           NEXT_REFRESH: (body.n | 0),
           PAYLOAD:      buf,
         }, drain);

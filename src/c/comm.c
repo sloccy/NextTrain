@@ -40,7 +40,6 @@ static void prv_handle_arrivals(DictionaryIterator *iter);
 static void prv_handle_status(DictionaryIterator *iter);
 static void prv_parse_arrivals_payload(ArrivalCache *cache,
                                         const uint8_t *data, size_t len,
-                                        const char *station_name,
                                         uint32_t next_refresh);
 
 // ─── Init / Deinit ────────────────────────────────────────────────────────────
@@ -294,7 +293,6 @@ static void prv_handle_stations_chunk(DictionaryIterator *iter) {
 static void prv_handle_arrivals(DictionaryIterator *iter) {
   APP_LOG(APP_LOG_LEVEL_INFO, "[comm] handle_arrivals: enter");
   Tuple *qi = dict_find(iter, MESSAGE_KEY_QUERY_INDEX);
-  Tuple *sn = dict_find(iter, MESSAGE_KEY_STATION_NAME);
   Tuple *nr = dict_find(iter, MESSAGE_KEY_NEXT_REFRESH);
   Tuple *pl = dict_find(iter, MESSAGE_KEY_PAYLOAD);
   if (!qi || !pl) {
@@ -303,17 +301,16 @@ static void prv_handle_arrivals(DictionaryIterator *iter) {
     return;
   }
 
-  uint8_t query_index  = qi->value->uint8;
-  const char *sta_name = sn ? sn->value->cstring : "Unknown";
-  uint32_t next_ref    = nr ? nr->value->uint32 : 0;
-  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] handle_arrivals: qi=%d sta='%s' pl_len=%u next=%lu",
-          (int)query_index, sta_name, (unsigned)pl->length, (unsigned long)next_ref);
+  uint8_t query_index = qi->value->uint8;
+  uint32_t next_ref   = nr ? nr->value->uint32 : 0;
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] handle_arrivals: qi=%d pl_len=%u next=%lu",
+          (int)query_index, (unsigned)pl->length, (unsigned long)next_ref);
 
-  // Parse directly into the global cache slot — keeps ~728-byte ArrivalCache off
-  // the stack (returning by value blew the app stack and crashed the watch).
+  // Parse directly into the global cache slot — keeps ArrivalCache off the stack
+  // (returning by value blew the app stack and crashed the watch).
   ArrivalCache *cache = state_get_arrival_cache(query_index);
   state_clear_arrival_cache(query_index);
-  prv_parse_arrivals_payload(cache, pl->value->data, pl->length, sta_name, next_ref);
+  prv_parse_arrivals_payload(cache, pl->value->data, pl->length, next_ref);
   APP_LOG(APP_LOG_LEVEL_INFO, "[comm] handle_arrivals: parsed count=%d cb=%s",
           (int)cache->count, s_arr_cb ? "SET" : "NULL");
   if (s_arr_cb) s_arr_cb(query_index, cache);
@@ -346,10 +343,8 @@ static void prv_handle_status(DictionaryIterator *iter) {
 
 static void prv_parse_arrivals_payload(ArrivalCache *cache,
                                         const uint8_t *data, size_t len,
-                                        const char *station_name,
                                         uint32_t next_refresh) {
   // Caller is responsible for zeroing *cache (state_clear_arrival_cache).
-  strncpy(cache->station_name, station_name, sizeof(cache->station_name) - 1);
   cache->next_refresh = next_refresh;
   cache->valid        = true;
 

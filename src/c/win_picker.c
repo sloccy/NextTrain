@@ -29,7 +29,7 @@ static void prv_sta_cancel_watchdog(const char *why) {
 static void prv_sta_watchdog_fire(void *ctx) {
   s_sta_watchdog = NULL;
   StationsCache *stations = state_get_stations();
-  if (stations && stations->valid) {
+  if (stations && stations->valid && stations->is_full) {
     APP_LOG(APP_LOG_LEVEL_INFO, "[picker] watchdog fired but stations valid, ignoring");
     return;
   }
@@ -49,7 +49,7 @@ static void prv_sta_arm_watchdog(void) {
 static uint16_t prv_sta_num_rows(MenuLayer *ml, uint16_t s, void *ctx) {
   if (s_sta_error) return 1;
   StationsCache *stations = state_get_stations();
-  if (!stations || !stations->valid) return 1; // loading row
+  if (!stations || !stations->valid || !stations->is_full) return 1; // loading row
   return stations->station_count;
 }
 
@@ -64,7 +64,7 @@ static void prv_sta_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, v
     return;
   }
   StationsCache *stations = state_get_stations();
-  if (!stations || !stations->valid) {
+  if (!stations || !stations->valid || !stations->is_full) {
     graphics_draw_text(ctx, "Loading stations\xe2\x80\xa6",
                        fonts_get_system_font(FONT_KEY_GOTHIC_18),
                        layer_get_bounds(cell),
@@ -72,16 +72,16 @@ static void prv_sta_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, v
     return;
   }
   if (idx->row >= stations->station_count) return;
-  menu_cell_basic_draw(ctx, cell,
-                       stations->stations[idx->row].name,
-                       NULL, NULL);
+  char display_name[40];
+  slug_to_display(stations->stations[idx->row].slug, display_name, sizeof(display_name));
+  menu_cell_basic_draw(ctx, cell, display_name, NULL, NULL);
 }
 
 static void prv_sta_status(uint8_t qi, CommStatus status) {
   APP_LOG(APP_LOG_LEVEL_WARNING, "[picker] sta_status fired: status=%d qi=%d", (int)status, (int)qi);
   prv_sta_cancel_watchdog("status received");
   StationsCache *stations = state_get_stations();
-  if (stations && stations->valid) {
+  if (stations && stations->valid && stations->is_full) {
     APP_LOG(APP_LOG_LEVEL_INFO, "[picker] sta_status: stations already valid, ignoring");
     return;
   }
@@ -94,7 +94,7 @@ static void prv_sta_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
     s_sta_error = false;
     comm_set_stations_ready_callback(prv_sta_stations_ready);
     comm_set_status_callback(prv_sta_status);
-    comm_request_stations_version();
+    comm_request_stations_full();
     prv_sta_arm_watchdog();
     if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
     return;
@@ -103,11 +103,16 @@ static void prv_sta_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   if (!stations || !stations->valid) return;
   if (idx->row >= stations->station_count) return;
   const Station *st = &stations->stations[idx->row];
-  win_route_picker_push(st->slug, st->name);
+  win_route_picker_push(st->slug);
 }
 
 static void prv_sta_stations_ready(void) {
   APP_LOG(APP_LOG_LEVEL_INFO, "[picker] sta_stations_ready fired");
+  StationsCache *stations = state_get_stations();
+  if (!stations || !stations->is_full) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "[picker] sta_stations_ready: subset only, waiting for full sync");
+    return;
+  }
   prv_sta_cancel_watchdog("stations ready");
   s_sta_error = false;
   if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
@@ -135,10 +140,10 @@ static void prv_sta_window_load(Window *win) {
   comm_set_stations_ready_callback(prv_sta_stations_ready);
   comm_set_status_callback(prv_sta_status);
 
-  // If stations aren't loaded, kick a fresh request and start a watchdog so we
-  // surface a hang (no JS response) instead of spinning on "Loading stations…"
-  if (!existing || !existing->valid) {
-    comm_request_stations_version();
+  // Need the full station list for search. Request it if we don't have it yet
+  // (the persist-loaded subset is for home-screen icon rendering only).
+  if (!existing || !existing->valid || !existing->is_full) {
+    comm_request_stations_full();
     prv_sta_arm_watchdog();
   }
 }
@@ -169,7 +174,6 @@ void win_station_picker_push(void) {
 // Transient picker state (lives for the duration of this window)
 typedef struct {
   char slug[40];
-  char name[40];
 } RoutePickerCtx;
 
 static Window       *s_rte_window;
@@ -282,7 +286,6 @@ static void prv_rte_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   ArrivalsParams params;
   memset(&params, 0, sizeof(params));
   strncpy(params.station_slug, s_rte_ctx->slug, sizeof(params.station_slug) - 1);
-  strncpy(params.station_name, s_rte_ctx->name, sizeof(params.station_name) - 1);
   strncpy(params.routes,       routes,          sizeof(params.routes) - 1);
   params.query_index   = QUERY_INDEX_TRANSIENT;
   params.from_favorite = false;
@@ -318,11 +321,10 @@ static void prv_rte_window_unload(Window *win) {
   s_rte_window = NULL;
 }
 
-void win_route_picker_push(const char *station_slug, const char *station_name) {
+void win_route_picker_push(const char *station_slug) {
   s_rte_ctx = malloc(sizeof(RoutePickerCtx));
   if (!s_rte_ctx) return;
   strncpy(s_rte_ctx->slug, station_slug, sizeof(s_rte_ctx->slug) - 1);
-  strncpy(s_rte_ctx->name, station_name, sizeof(s_rte_ctx->name) - 1);
 
   s_rte_window = window_create();
   window_set_background_color(s_rte_window, GColorWhite);

@@ -91,7 +91,6 @@ module.exports.invalidate = function() {
 //   [u16 station_count]
 //   for each station:
 //     [u8 slug_len][bytes slug]
-//     [u8 name_len][bytes name]
 //     [u8 route_count]
 //     for each route:
 //       [u8 r][u8 g][u8 b]
@@ -113,7 +112,6 @@ module.exports.pack = function(data) {
 
   stations.forEach(function(st) {
     util.lpStr(bytes, st.k, 39);  // slug
-    util.lpStr(bytes, st.n, 39);  // name
     var routes = st.r || [];
     bytes.push(routes.length & 0xFF);
     routes.forEach(function(rm) {

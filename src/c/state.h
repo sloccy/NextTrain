@@ -20,7 +20,6 @@ typedef struct {
 
 typedef struct {
   char          slug[40];
-  char          name[40];
   uint8_t       route_count;
   StationRoute *routes;   // points into StationsCache.route_pool
 } Station;
@@ -31,6 +30,10 @@ typedef struct {
   Station      *stations;
   StationRoute *route_pool;
   bool          valid;
+  // True after a full chunked sync; false when only the favorites-only persist
+  // subset is loaded. The picker requires the full list — the subset is just
+  // for fast home-screen icon rendering on cold start.
+  bool          is_full;
 } StationsCache;
 
 // ─── Arrivals cache (per-favorite slot + one transient slot) ─────────────────
@@ -49,14 +52,12 @@ typedef struct {
   uint8_t      count;
   ArrivalEntry entries[MAX_ARRIVALS];
   uint32_t     next_refresh;
-  char         station_name[40];
 } ArrivalCache;
 
 // ─── Favorites ───────────────────────────────────────────────────────────────
 
 typedef struct {
   char    station_slug[40];
-  char    station_name[40];
   uint8_t route_count;
   struct {
     char route[4]; // null-terminated
@@ -68,14 +69,18 @@ typedef struct {
 // Key 0       : STATIONS_VERSION (uint32)
 // Key 1       : STATIONS_BLOB_SIZE (uint32) — total byte length of assembled blob
 // Key 2..101  : STATIONS_CHUNK_i (256-byte slices of the blob)
+// Key 100     : SCHEMA_VERSION (uint8) — bumped when Favorite binary layout changes
 // Key 200     : FAVORITES_COUNT (uint8)
 // Key 201..216: FAVORITE_i (one Favorite struct each)
 
 #define PERSIST_KEY_STATIONS_VERSION    0
 #define PERSIST_KEY_STATIONS_BLOB_SIZE  1
 #define PERSIST_KEY_STATIONS_CHUNK_BASE 2   // keys 2..101
+#define PERSIST_KEY_SCHEMA_VERSION      100
 #define PERSIST_KEY_FAVORITES_COUNT     200
 #define PERSIST_KEY_FAVORITES_BASE      201 // keys 201..216
+
+#define SCHEMA_V_NAMES_DROPPED 1
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 
@@ -108,3 +113,7 @@ const Station *state_find_station(const char *slug);
 
 // Encode Favorite routes as a comma-separated "route:dir" query string (e.g. "A:N,B:E")
 void state_format_routes_query(const Favorite *fav, char *buf, size_t buf_size);
+
+// Convert slug "union_station" → "Union Station". Underscores become spaces;
+// first char of each word uppercased. Mechanical — no punctuation reconstruction.
+void slug_to_display(const char *slug, char *out, size_t n);

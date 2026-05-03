@@ -35,7 +35,6 @@ static void prv_launch_favorite(uint8_t index) {
   ArrivalsParams params;
   memset(&params, 0, sizeof(params));
   strncpy(params.station_slug, fav->station_slug, sizeof(params.station_slug) - 1);
-  strncpy(params.station_name, fav->station_name, sizeof(params.station_name) - 1);
   strncpy(params.routes,       routes,            sizeof(params.routes) - 1);
   params.query_index   = index;
   params.from_favorite = true;
@@ -101,8 +100,10 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
 
     // Draw station name to the right of icons
     x += TEXT_MARGIN_LEFT;
+    char display_name[40];
+    slug_to_display(fav->station_slug, display_name, sizeof(display_name));
     GRect name_bounds = GRect(x, (bounds.size.h - 18) / 2, bounds.size.w - x - 4, 22);
-    graphics_draw_text(ctx, fav->station_name,
+    graphics_draw_text(ctx, display_name,
                        fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                        name_bounds, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 

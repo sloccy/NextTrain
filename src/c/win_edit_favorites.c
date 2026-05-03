@@ -102,9 +102,11 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
                      arrows, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 
   // Station name
+  char display_name[40];
+  slug_to_display(fav->station_slug, display_name, sizeof(display_name));
   graphics_context_set_text_color(ctx, GColorBlack);
   GRect name_r = GRect(8, 8, bounds.size.w - 36, 20);
-  graphics_draw_text(ctx, fav->station_name,
+  graphics_draw_text(ctx, display_name,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      name_r, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
