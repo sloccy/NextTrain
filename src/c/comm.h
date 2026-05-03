@@ -8,6 +8,7 @@
 typedef void (*ArrivalReceivedCb)(uint8_t query_index, const ArrivalCache *cache);
 typedef void (*StationsReadyCb)(void);
 typedef void (*StatusReceivedCb)(uint8_t query_index, CommStatus status);
+typedef void (*FavoriteRenamedCb)(void);
 
 void comm_init(uint32_t inbox_size);
 void comm_deinit(void);
@@ -15,6 +16,7 @@ void comm_deinit(void);
 void comm_set_arrivals_callback(ArrivalReceivedCb cb);
 void comm_set_stations_ready_callback(StationsReadyCb cb);
 void comm_set_status_callback(StatusReceivedCb cb);
+void comm_set_favorite_renamed_callback(FavoriteRenamedCb cb);
 
 // Outbound operations — all are queued and serialized through the AppMessage outbox.
 // Stations sync takes priority over arrivals requests.

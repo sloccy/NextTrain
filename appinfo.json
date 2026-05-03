@@ -23,7 +23,9 @@
     "CHUNK_TOTAL":      8,
     "PAYLOAD":          9,
     "NEXT_REFRESH":     11,
-    "INBOX_SIZE":       12
+    "INBOX_SIZE":       12,
+    "RENAME_INDEX":     13,
+    "RENAME_NAME":      14
   },
   "resources": {
     "media": []

@@ -15,9 +15,12 @@ typedef enum {
 
 // MSG_DATA_TYPE values (phone → watch)
 typedef enum {
-  DATA_TYPE_STATIONS_VERSION = 1,
-  DATA_TYPE_STATIONS_CHUNK   = 2,
-  DATA_TYPE_ARRIVALS         = 3,
+  DATA_TYPE_STATIONS_VERSION   = 1,
+  DATA_TYPE_STATIONS_CHUNK     = 2,
+  DATA_TYPE_ARRIVALS           = 3,
+  DATA_TYPE_FAVORITES_REQUEST  = 6, // phone → watch: request favorites list for config
+  DATA_TYPE_FAVORITES_LIST     = 7, // watch → phone: JSON array of current favorites
+  DATA_TYPE_RENAME_FAVORITE    = 8, // phone → watch: rename a specific favorite
 } DataType;
 
 // MSG_STATUS values (phone → watch)

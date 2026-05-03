@@ -31,9 +31,10 @@ static uint16_t s_recv_chunks  = 0;
 
 // ─── Callbacks ───────────────────────────────────────────────────────────────
 
-static ArrivalReceivedCb s_arr_cb     = NULL;
-static StationsReadyCb   s_sta_cb     = NULL;
-static StatusReceivedCb  s_status_cb  = NULL;
+static ArrivalReceivedCb s_arr_cb       = NULL;
+static StationsReadyCb   s_sta_cb       = NULL;
+static StatusReceivedCb  s_status_cb    = NULL;
+static FavoriteRenamedCb s_fav_cb       = NULL;
 
 // ─── Forward declarations ─────────────────────────────────────────────────────
 
@@ -42,6 +43,8 @@ static void prv_handle_stations_version(DictionaryIterator *iter);
 static void prv_handle_stations_chunk(DictionaryIterator *iter);
 static void prv_handle_arrivals(DictionaryIterator *iter);
 static void prv_handle_status(DictionaryIterator *iter);
+static void prv_handle_favorites_request(void);
+static void prv_handle_rename_favorite(DictionaryIterator *iter);
 static void prv_parse_arrivals_payload(ArrivalCache *cache,
                                         const uint8_t *data, size_t len,
                                         uint32_t next_refresh);
@@ -64,6 +67,7 @@ void comm_deinit(void) {
 void comm_set_arrivals_callback(ArrivalReceivedCb cb)       { s_arr_cb    = cb; }
 void comm_set_stations_ready_callback(StationsReadyCb cb)   { s_sta_cb    = cb; }
 void comm_set_status_callback(StatusReceivedCb cb)          { s_status_cb = cb; }
+void comm_set_favorite_renamed_callback(FavoriteRenamedCb cb) { s_fav_cb  = cb; }
 
 // ─── Enqueue helpers ──────────────────────────────────────────────────────────
 
@@ -189,9 +193,11 @@ void comm_inbox_received(DictionaryIterator *iter) {
   if (dt) {
     APP_LOG(APP_LOG_LEVEL_INFO, "[comm]   data_type=%d", (int)dt->value->uint8);
     switch ((DataType)dt->value->uint8) {
-      case DATA_TYPE_STATIONS_VERSION: prv_handle_stations_version(iter); return;
-      case DATA_TYPE_STATIONS_CHUNK:   prv_handle_stations_chunk(iter);   return;
-      case DATA_TYPE_ARRIVALS:         prv_handle_arrivals(iter);          return;
+      case DATA_TYPE_STATIONS_VERSION:  prv_handle_stations_version(iter); return;
+      case DATA_TYPE_STATIONS_CHUNK:    prv_handle_stations_chunk(iter);   return;
+      case DATA_TYPE_ARRIVALS:          prv_handle_arrivals(iter);         return;
+      case DATA_TYPE_FAVORITES_REQUEST: prv_handle_favorites_request();    return;
+      case DATA_TYPE_RENAME_FAVORITE:   prv_handle_rename_favorite(iter);  return;
       default:
         APP_LOG(APP_LOG_LEVEL_WARNING, "[comm]   unknown data_type=%d", (int)dt->value->uint8);
         return;
@@ -344,6 +350,57 @@ static void prv_handle_status(DictionaryIterator *iter) {
           prv_status_name((CommStatus)status), (int)status, (int)query_index,
           s_status_cb ? "SET" : "NULL");
   if (s_status_cb) s_status_cb(query_index, (CommStatus)status);
+}
+
+// ─── Phone config handlers ────────────────────────────────────────────────────
+
+static void prv_handle_favorites_request(void) {
+  if (s_sending) {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "[comm] favorites_request: outbox busy, skipping");
+    return;
+  }
+
+  uint8_t count = state_get_favorite_count();
+  char buf[1024];
+  int off = 0;
+
+  buf[off++] = '[';
+  for (uint8_t i = 0; i < count && off < (int)sizeof(buf) - 80; i++) {
+    Favorite *f = state_get_favorite(i);
+    if (!f) continue;
+    if (i > 0 && off < (int)sizeof(buf) - 1) buf[off++] = ',';
+    int n = snprintf(buf + off, sizeof(buf) - (size_t)off,
+                     "{\"i\":%u,\"s\":\"%s\",\"n\":\"%s\"}",
+                     (unsigned)i, f->station_slug, f->name);
+    if (n < 0 || (size_t)n >= sizeof(buf) - (size_t)off) break;
+    off += n;
+  }
+  if (off < (int)sizeof(buf) - 1) buf[off++] = ']';
+  buf[off] = 0;
+
+  DictionaryIterator *iter;
+  AppMessageResult result = app_message_outbox_begin(&iter);
+  if (result != APP_MSG_OK || !iter) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] favorites_request: outbox_begin failed: %d", (int)result);
+    return;
+  }
+  dict_write_uint8(iter, MESSAGE_KEY_DATA_TYPE, DATA_TYPE_FAVORITES_LIST);
+  dict_write_cstring(iter, MESSAGE_KEY_PAYLOAD, buf);
+  app_message_outbox_send();
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] favorites_list sent (%d bytes)", off);
+}
+
+static void prv_handle_rename_favorite(DictionaryIterator *iter) {
+  Tuple *idx_t  = dict_find(iter, MESSAGE_KEY_RENAME_INDEX);
+  Tuple *name_t = dict_find(iter, MESSAGE_KEY_RENAME_NAME);
+  if (!idx_t || !name_t) {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "[comm] rename_favorite: missing keys");
+    return;
+  }
+  uint8_t idx = idx_t->value->uint8;
+  state_set_favorite_name(idx, name_t->value->cstring);
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] favorite %u renamed to '%s'", (unsigned)idx, name_t->value->cstring);
+  if (s_fav_cb) s_fav_cb();
 }
 
 // ─── Arrivals payload parser ──────────────────────────────────────────────────

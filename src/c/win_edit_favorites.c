@@ -1,5 +1,6 @@
 #include "win_edit_favorites.h"
 #include "win_home.h"
+#include "win_rename.h"
 #include "state.h"
 #include "ui.h"
 #include <string.h>
@@ -11,7 +12,12 @@ static uint8_t       s_selected_row;
 
 // ─── ActionMenu ───────────────────────────────────────────────────────────────
 
-enum { ACTION_MOVE_UP = 1, ACTION_MOVE_DOWN, ACTION_DELETE };
+enum { ACTION_MOVE_UP = 1, ACTION_MOVE_DOWN, ACTION_RENAME, ACTION_DELETE };
+
+static void prv_rename_done(void) {
+  if (s_menu) menu_layer_reload_data(s_menu);
+  win_home_reload();
+}
 
 static void prv_action_performed(ActionMenu *am, const ActionMenuItem *item, void *ctx) {
   uint32_t action = (uint32_t)(uintptr_t)action_menu_item_get_action_data(item);
@@ -30,6 +36,9 @@ static void prv_action_performed(ActionMenu *am, const ActionMenuItem *item, voi
         s_selected_row++;
       }
       break;
+    case ACTION_RENAME:
+      win_rename_start(s_selected_row, prv_rename_done);
+      break;
     case ACTION_DELETE:
       state_remove_favorite(s_selected_row);
       if (s_selected_row >= state_get_favorite_count() && s_selected_row > 0)
@@ -45,7 +54,7 @@ static void prv_show_action_menu(uint8_t row) {
   uint8_t count  = state_get_favorite_count();
 
   // Only add Move Up / Move Down when the action is actually possible
-  uint8_t capacity = 1 + (row > 0 ? 1 : 0) + (row + 1 < count ? 1 : 0);
+  uint8_t capacity = 2 + (row > 0 ? 1 : 0) + (row + 1 < count ? 1 : 0); // +2 for Rename+Delete
   ActionMenuLevel *root = action_menu_level_create(capacity);
   if (row > 0)
     action_menu_level_add_action(root, "Move Up",   prv_action_performed,
@@ -53,6 +62,8 @@ static void prv_show_action_menu(uint8_t row) {
   if (row + 1 < count)
     action_menu_level_add_action(root, "Move Down", prv_action_performed,
                                  (void *)(uintptr_t)ACTION_MOVE_DOWN);
+  action_menu_level_add_action(root, "Rename", prv_action_performed,
+                               (void *)(uintptr_t)ACTION_RENAME);
   action_menu_level_add_action(root, "Delete", prv_action_performed,
                                (void *)(uintptr_t)ACTION_DELETE);
 
@@ -90,29 +101,39 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   Favorite *fav = state_get_favorite(idx->row);
   if (!fav) return;
 
-  // Route summary left
-  char routes_str[40] = {0};
-  ui_format_routes(fav, routes_str, sizeof(routes_str));
+  StationsCache *stations = state_get_stations();
+
+  // Composite icon on the left
+  GPoint icon_origin = GPoint(4, (bounds.size.h - 44) / 2);
+  ui_draw_favorite_icon(ctx, icon_origin, fav, stations);
 
   // Reorder arrows indicator (right edge)
   graphics_context_set_text_color(ctx, GColorDarkGray);
-  GRect arrows = GRect(bounds.size.w - 22, (bounds.size.h - 20) / 2, 20, 20);
+  GRect arrows = GRect(bounds.size.w - 20, (bounds.size.h - 18) / 2, 18, 18);
   graphics_draw_text(ctx, "\xe2\x87\x85", // ⇅
-                     fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                     fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      arrows, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 
   // Station name
   char display_name[40];
-  slug_to_display(fav->station_slug, display_name, sizeof(display_name));
+  if (fav->name[0]) {
+    strncpy(display_name, fav->name, sizeof(display_name) - 1);
+    display_name[sizeof(display_name) - 1] = 0;
+  } else {
+    slug_to_display(fav->station_slug, display_name, sizeof(display_name));
+  }
   graphics_context_set_text_color(ctx, GColorBlack);
-  GRect name_r = GRect(8, 8, bounds.size.w - 36, 20);
+  int16_t text_x = 4 + 44 + 4; // icon_margin + bbox_size + gap
+  GRect name_r = GRect(text_x, 6, bounds.size.w - text_x - 24, 20);
   graphics_draw_text(ctx, display_name,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      name_r, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
   // Routes subtitle
+  char routes_str[40] = {0};
+  ui_format_routes(fav, routes_str, sizeof(routes_str));
   graphics_context_set_text_color(ctx, GColorDarkGray);
-  GRect sub_r = GRect(8, 28, bounds.size.w - 36, 16);
+  GRect sub_r = GRect(text_x, 28, bounds.size.w - text_x - 24, 16);
   graphics_draw_text(ctx, routes_str,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      sub_r, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);

@@ -23,6 +23,10 @@
 static Window    *s_window;
 static MenuLayer *s_menu;
 
+static void prv_fav_renamed(void) {
+  if (s_menu) menu_layer_reload_data(s_menu);
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 static void prv_launch_favorite(uint8_t index) {
@@ -94,14 +98,21 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
 
     StationsCache *stations = state_get_stations();
 
-    // Draw route icons left-side
-    int16_t x = ICON_MARGIN_LEFT;
-    x = ui_draw_route_icons(ctx, bounds, fav, stations, x);
+    // Draw composite favorite icon
+    GPoint icon_origin = GPoint(ICON_MARGIN_LEFT,
+                                bounds.origin.y + (bounds.size.h - 44) / 2);
+    int16_t x = ui_draw_favorite_icon(ctx, icon_origin, fav, stations);
+    graphics_context_set_text_color(ctx, GColorBlack);
 
-    // Draw station name to the right of icons
+    // Draw station name to the right of the icon
     x += TEXT_MARGIN_LEFT;
     char display_name[40];
-    slug_to_display(fav->station_slug, display_name, sizeof(display_name));
+    if (fav->name[0]) {
+      strncpy(display_name, fav->name, sizeof(display_name) - 1);
+      display_name[sizeof(display_name) - 1] = 0;
+    } else {
+      slug_to_display(fav->station_slug, display_name, sizeof(display_name));
+    }
     GRect name_bounds = GRect(x, (bounds.size.h - 18) / 2, bounds.size.w - x - 4, 22);
     graphics_draw_text(ctx, display_name,
                        fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
@@ -157,9 +168,11 @@ static void prv_window_load(Window *win) {
   menu_layer_set_highlight_colors(s_menu, GColorLightGray, GColorBlack);
   menu_layer_set_click_config_onto_window(s_menu, win);
   layer_add_child(root, menu_layer_get_layer(s_menu));
+  comm_set_favorite_renamed_callback(prv_fav_renamed);
 }
 
 static void prv_window_unload(Window *win) {
+  comm_set_favorite_renamed_callback(NULL);
   menu_layer_destroy(s_menu);
   s_menu = NULL;
 }

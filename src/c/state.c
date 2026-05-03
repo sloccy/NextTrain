@@ -31,51 +31,16 @@ void state_init(void) {
   memset(s_arrival_cache, 0, sizeof(s_arrival_cache));
   s_favorite_count = 0;
 
-  // Schema migration: Favorite lost station_name[40]. Read old layout, write new.
+  // Wipe favorites on any schema mismatch (acceptable during early development).
   uint8_t schema = persist_exists(PERSIST_KEY_SCHEMA_VERSION)
       ? (uint8_t)persist_read_int(PERSIST_KEY_SCHEMA_VERSION) : 0;
 
-  if (schema < SCHEMA_V_NAMES_DROPPED) {
-    typedef struct {
-      char    station_slug[40];
-      char    station_name[40]; // dropped in SCHEMA_V_NAMES_DROPPED
-      uint8_t route_count;
-      struct { char route[4]; char dir; } routes[MAX_FAV_ROUTES];
-    } FavoriteV0;
-
-    uint8_t count = persist_exists(PERSIST_KEY_FAVORITES_COUNT)
-        ? (uint8_t)persist_read_int(PERSIST_KEY_FAVORITES_COUNT) : 0;
-    if (count > MAX_FAVORITES) count = MAX_FAVORITES;
-
-    for (uint8_t i = 0; i < count; i++) {
-      FavoriteV0 old;
-      memset(&old, 0, sizeof(old));
-      persist_read_data(PERSIST_KEY_FAVORITES_BASE + i, &old, sizeof(old));
-
-      Favorite nw;
-      memset(&nw, 0, sizeof(nw));
-      strncpy(nw.station_slug, old.station_slug, sizeof(nw.station_slug) - 1);
-      nw.route_count = old.route_count;
-      for (uint8_t r = 0; r < nw.route_count && r < MAX_FAV_ROUTES; r++) {
-        strncpy(nw.routes[r].route, old.routes[r].route, sizeof(nw.routes[r].route) - 1);
-        nw.routes[r].dir = old.routes[r].dir;
-      }
-      persist_write_data(PERSIST_KEY_FAVORITES_BASE + i, &nw, sizeof(Favorite));
-    }
-
-    // Wipe the stations subset — it was encoded with the old wire format (had
-    // embedded names) and would be mis-parsed by the updated parser. Force a
-    // clean re-sync from the worker on next boot.
-    persist_write_int(PERSIST_KEY_STATIONS_VERSION, 0);
-    persist_delete(PERSIST_KEY_STATIONS_BLOB_SIZE);
-    for (int k = 0; k < 100; k++) {
-      persist_delete(PERSIST_KEY_STATIONS_CHUNK_BASE + k);
-    }
-
-    persist_write_int(PERSIST_KEY_SCHEMA_VERSION, SCHEMA_V_NAMES_DROPPED);
+  if (schema < SCHEMA_V_USER_NAMES) {
+    persist_write_int(PERSIST_KEY_FAVORITES_COUNT, 0);
+    persist_write_int(PERSIST_KEY_SCHEMA_VERSION, SCHEMA_V_USER_NAMES);
     APP_LOG(APP_LOG_LEVEL_INFO,
-            "[state] schema migrated v0→v%d: %u favorites rewritten, stations cache wiped",
-            SCHEMA_V_NAMES_DROPPED, (unsigned)count);
+            "[state] schema v%u→v%u: favorites wiped (struct changed)",
+            (unsigned)schema, SCHEMA_V_USER_NAMES);
   }
 
   // Load favorites from persist
@@ -373,6 +338,14 @@ void state_swap_favorites(uint8_t a, uint8_t b) {
   ArrivalCache tmp_cache = s_arrival_cache[a];
   s_arrival_cache[a] = s_arrival_cache[b];
   s_arrival_cache[b] = tmp_cache;
+}
+
+void state_set_favorite_name(uint8_t index, const char *name) {
+  if (index >= s_favorite_count) return;
+  Favorite *fav = &s_favorites[index];
+  memset(fav->name, 0, FAVORITE_NAME_LEN);
+  if (name) strncpy(fav->name, name, FAVORITE_NAME_LEN - 1);
+  persist_write_data(PERSIST_KEY_FAVORITES_BASE + index, fav, sizeof(Favorite));
 }
 
 // ─── Arrivals cache ───────────────────────────────────────────────────────────

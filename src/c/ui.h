@@ -12,6 +12,14 @@ void ui_draw_route_icon(GContext *ctx, GRect bounds, char letter, GColor bg_colo
 int16_t ui_draw_route_icons(GContext *ctx, GRect bounds, const Favorite *fav,
                              const StationsCache *stations, int16_t x_offset);
 
+// Composite favorite icon: white square with per-quadrant colored outline,
+// black letters arranged by route count (1=centered, 2=TL+BR, 3=TL+TR+BC,
+// 4=corners), and dedup'd cardinal arrows outside the square.
+// origin is the top-left of the 44×44 bounding box (36px square + 4px margins).
+// Returns the right edge x coordinate.
+int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin, const Favorite *fav,
+                              const StationsCache *stations);
+
 // Map ArrivalStatus to a short display string.
 const char *ui_status_label(ArrivalStatus status);
 

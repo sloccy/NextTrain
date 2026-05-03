@@ -19,6 +19,7 @@ void ui_draw_route_icon(GContext *ctx, GRect bounds, char letter, GColor bg_colo
                      GTextOverflowModeFill,
                      GTextAlignmentCenter,
                      NULL);
+  graphics_context_set_text_color(ctx, GColorBlack);
 }
 
 int16_t ui_draw_route_icons(GContext *ctx, GRect bounds, const Favorite *fav,
@@ -72,6 +73,226 @@ int16_t ui_draw_route_icons(GContext *ctx, GRect bounds, const Favorite *fav,
   }
 
   return x_offset;
+}
+
+// ─── Composite favorite icon ──────────────────────────────────────────────────
+
+#define FAV_ARROW_MARGIN  4
+#define FAV_SQUARE_SIZE  36
+#define FAV_BBOX_SIZE    44  // FAV_SQUARE_SIZE + 2 * FAV_ARROW_MARGIN
+
+int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
+                               const Favorite *fav, const StationsCache *stations) {
+  if (!fav || fav->route_count == 0) return origin.x + FAV_BBOX_SIZE;
+
+  uint8_t n = fav->route_count;
+  if (n > 4) n = 4;
+
+  // Locate the station's route entries once to resolve colors
+  const Station *st = NULL;
+  if (stations && stations->valid) {
+    for (uint16_t s = 0; s < stations->station_count; s++) {
+      if (strcmp(stations->stations[s].slug, fav->station_slug) == 0) {
+        st = &stations->stations[s];
+        break;
+      }
+    }
+  }
+
+  // Resolve up to 4 route colors
+  GColor route_color[4];
+  for (uint8_t i = 0; i < n; i++) {
+    route_color[i] = GColorLightGray;
+    if (st) {
+      for (uint8_t r = 0; r < st->route_count; r++) {
+        if (st->routes[r].route[0] == fav->routes[i].route[0]
+            && st->routes[r].dir == fav->routes[i].dir) {
+          route_color[i] = ui_gcolor_from_rgb(st->routes[r].r,
+                                              st->routes[r].g,
+                                              st->routes[r].b);
+          break;
+        }
+      }
+    }
+  }
+
+  int16_t sx = origin.x + FAV_ARROW_MARGIN;
+  int16_t sy = origin.y + FAV_ARROW_MARGIN;
+  GRect sq = GRect(sx, sy, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE);
+
+  // White fill (sharp corners so outline segments butt cleanly)
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, sq, 0, GCornerNone);
+
+  // Outline: 8 half-edge segments (each side split at its midpoint).
+  // Segments: 0=top-left-half, 1=top-right-half, 2=right-top-half,
+  //           3=right-bot-half, 4=bot-right-half, 5=bot-left-half,
+  //           6=left-bot-half, 7=left-top-half
+  // Each segment maps to a route index that owns its color.
+  int8_t seg_route[8];
+  if (n == 1) {
+    for (int i = 0; i < 8; i++) seg_route[i] = 0;
+  } else if (n == 2) {
+    // route 0: top + left edges; route 1: bottom + right edges
+    seg_route[0] = 0; seg_route[1] = 0; // top halves → route 0
+    seg_route[2] = 1; seg_route[3] = 1; // right halves → route 1
+    seg_route[4] = 1; seg_route[5] = 1; // bottom halves → route 1
+    seg_route[6] = 0; seg_route[7] = 0; // left halves → route 0
+  } else if (n == 3) {
+    // TL quadrant (top-left half, left-top half): route 0
+    // TR quadrant (top-right half, right-top half): route 1
+    // Bottom (bot halves, lower side-halves): route 2
+    seg_route[0] = 0; // top-left-half
+    seg_route[1] = 1; // top-right-half
+    seg_route[2] = 1; // right-top-half
+    seg_route[3] = 2; // right-bot-half
+    seg_route[4] = 2; // bot-right-half
+    seg_route[5] = 2; // bot-left-half
+    seg_route[6] = 2; // left-bot-half
+    seg_route[7] = 0; // left-top-half
+  } else { // n == 4
+    // Each corner-quadrant owns its two adjacent half-edges:
+    // TL(0): top-left-half, left-top-half
+    // TR(1): top-right-half, right-top-half
+    // BL(2): bot-left-half, left-bot-half
+    // BR(3): bot-right-half, right-bot-half
+    seg_route[0] = 0; // top-left-half
+    seg_route[1] = 1; // top-right-half
+    seg_route[2] = 1; // right-top-half
+    seg_route[3] = 3; // right-bot-half
+    seg_route[4] = 3; // bot-right-half
+    seg_route[5] = 2; // bot-left-half
+    seg_route[6] = 2; // left-bot-half
+    seg_route[7] = 0; // left-top-half
+  }
+
+  int16_t mid = FAV_SQUARE_SIZE / 2; // 18
+  int16_t e   = FAV_SQUARE_SIZE - 1; // 35 (last pixel)
+  // Segment endpoints [start, end] as GPoints (relative to square top-left sx,sy)
+  GPoint seg_pts[8][2] = {
+    { GPoint(sx,       sy      ), GPoint(sx + mid, sy      ) }, // top-left-half
+    { GPoint(sx + mid, sy      ), GPoint(sx + e,   sy      ) }, // top-right-half
+    { GPoint(sx + e,   sy      ), GPoint(sx + e,   sy + mid) }, // right-top-half
+    { GPoint(sx + e,   sy + mid), GPoint(sx + e,   sy + e  ) }, // right-bot-half
+    { GPoint(sx + e,   sy + e  ), GPoint(sx + mid, sy + e  ) }, // bot-right-half
+    { GPoint(sx + mid, sy + e  ), GPoint(sx,       sy + e  ) }, // bot-left-half
+    { GPoint(sx,       sy + e  ), GPoint(sx,       sy + mid) }, // left-bot-half
+    { GPoint(sx,       sy + mid), GPoint(sx,       sy      ) }, // left-top-half
+  };
+
+  graphics_context_set_stroke_width(ctx, 2);
+  for (int i = 0; i < 8; i++) {
+    graphics_context_set_stroke_color(ctx, route_color[seg_route[i]]);
+    graphics_draw_line(ctx, seg_pts[i][0], seg_pts[i][1]);
+  }
+  graphics_context_set_stroke_width(ctx, 1);
+
+  // Letters: always black, arranged by route count
+  graphics_context_set_text_color(ctx, GColorBlack);
+  int16_t half = FAV_SQUARE_SIZE / 2; // 18
+  int16_t qoff = 1; // nudge inside the outline
+
+  // GRects for each slot (within the square)
+  GRect slot[4];
+  GFont letter_font;
+  if (n == 1) {
+    slot[0] = GRect(sx, sy - 1, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
+    letter_font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+  } else {
+    letter_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+    slot[0] = GRect(sx + qoff,        sy + qoff - 1,   half - qoff, half + 1); // TL
+    slot[1] = GRect(sx + half,        sy + qoff - 1,   half - qoff, half + 1); // TR
+    slot[2] = GRect(sx + qoff,        sy + half - 1,   half - qoff, half + 1); // BL
+    slot[3] = GRect(sx + half,        sy + half - 1,   half - qoff, half + 1); // BR
+  }
+
+  if (n == 1) {
+    char text[2] = { fav->routes[0].route[0], 0 };
+    graphics_draw_text(ctx, text, letter_font, slot[0],
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  } else if (n == 2) {
+    char t0[2] = { fav->routes[0].route[0], 0 };
+    char t1[2] = { fav->routes[1].route[0], 0 };
+    graphics_draw_text(ctx, t0, letter_font, slot[0],
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    graphics_draw_text(ctx, t1, letter_font, slot[3],
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  } else if (n == 3) {
+    char t0[2] = { fav->routes[0].route[0], 0 };
+    char t1[2] = { fav->routes[1].route[0], 0 };
+    char t2[2] = { fav->routes[2].route[0], 0 };
+    graphics_draw_text(ctx, t0, letter_font, slot[0],
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    graphics_draw_text(ctx, t1, letter_font, slot[1],
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    // Bottom-center: horizontally centered between BL and BR
+    GRect bc = GRect(sx + half / 2, sy + half - 1, half, half + 1);
+    graphics_draw_text(ctx, t2, letter_font, bc,
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  } else { // n == 4
+    for (int i = 0; i < 4; i++) {
+      char t[2] = { fav->routes[i].route[0], 0 };
+      graphics_draw_text(ctx, t, letter_font, slot[i],
+                         GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    }
+  }
+
+  // Cardinal arrows: one per unique direction, outside the square
+  // N=above, S=below, E=right, W=left. Small triangle, 5px base, 4px height.
+  bool dirs[4] = { false, false, false, false }; // N, S, E, W
+  for (uint8_t i = 0; i < n; i++) {
+    switch (fav->routes[i].dir) {
+      case 'N': dirs[0] = true; break;
+      case 'S': dirs[1] = true; break;
+      case 'E': dirs[2] = true; break;
+      case 'W': dirs[3] = true; break;
+    }
+  }
+
+  int16_t cx = sx + mid; // center x of square
+  int16_t cy = sy + mid; // center y of square
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+
+  if (dirs[0]) { // N: triangle pointing up, above top edge
+    GPoint apex  = GPoint(cx,     sy - 2);
+    GPoint base1 = GPoint(cx - 3, sy + 1);
+    GPoint base2 = GPoint(cx + 3, sy + 1);
+    graphics_draw_line(ctx, apex, base1);
+    graphics_draw_line(ctx, apex, base2);
+    graphics_draw_line(ctx, base1, base2);
+  }
+  if (dirs[1]) { // S: triangle pointing down, below bottom edge
+    int16_t by = sy + FAV_SQUARE_SIZE;
+    GPoint apex  = GPoint(cx,     by + 1);
+    GPoint base1 = GPoint(cx - 3, by - 2);
+    GPoint base2 = GPoint(cx + 3, by - 2);
+    graphics_draw_line(ctx, apex, base1);
+    graphics_draw_line(ctx, apex, base2);
+    graphics_draw_line(ctx, base1, base2);
+  }
+  if (dirs[2]) { // E: triangle pointing right
+    int16_t rx = sx + FAV_SQUARE_SIZE;
+    GPoint apex  = GPoint(rx + 1, cy    );
+    GPoint base1 = GPoint(rx - 2, cy - 3);
+    GPoint base2 = GPoint(rx - 2, cy + 3);
+    graphics_draw_line(ctx, apex, base1);
+    graphics_draw_line(ctx, apex, base2);
+    graphics_draw_line(ctx, base1, base2);
+  }
+  if (dirs[3]) { // W: triangle pointing left
+    GPoint apex  = GPoint(sx - 2, cy    );
+    GPoint base1 = GPoint(sx + 1, cy - 3);
+    GPoint base2 = GPoint(sx + 1, cy + 3);
+    graphics_draw_line(ctx, apex, base1);
+    graphics_draw_line(ctx, apex, base2);
+    graphics_draw_line(ctx, base1, base2);
+  }
+
+  // Restore context state
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+
+  return origin.x + FAV_BBOX_SIZE;
 }
 
 const char *ui_status_label(ArrivalStatus status) {

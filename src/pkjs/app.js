@@ -7,8 +7,12 @@ var WORKER_BASE = 'https://nexttrainworker.sloccy.workers.dev';
 
 var OP = { GET_STATIONS_VERSION: 1, GET_STATIONS_FULL: 2,
            GET_ARRIVALS: 3, REFRESH_STATIONS: 4 };
-var DATA_TYPE = { STATIONS_VERSION: 1, STATIONS_CHUNK: 2, ARRIVALS: 3 };
+var DATA_TYPE = { STATIONS_VERSION: 1, STATIONS_CHUNK: 2, ARRIVALS: 3,
+                  FAVORITES_REQUEST: 6, FAVORITES_LIST: 7, RENAME_FAVORITE: 8 };
 var STATUS    = { OK: 0, OFFLINE: 1, NO_DATA: 2, ERROR: 3 };
+
+// Pending callback waiting for a FAVORITES_LIST response from the watch
+var s_config_cb = null;
 
 // ─── In-flight serialization queue ────────────────────────────────────────────
 // Phone serializes its own outbound sends via the success-callback chain.
@@ -218,6 +222,17 @@ Pebble.addEventListener('ready', function() {
 });
 
 Pebble.addEventListener('appmessage', function(e) {
+  // Watch → phone responses for the config flow
+  if (e.payload.DATA_TYPE === DATA_TYPE.FAVORITES_LIST) {
+    console.log('[pkjs] received FAVORITES_LIST');
+    if (s_config_cb) {
+      var cb = s_config_cb;
+      s_config_cb = null;
+      cb(e.payload.PAYLOAD || '[]');
+    }
+    return;
+  }
+
   var op           = e.payload.OP;
   var queryIndex   = e.payload.QUERY_INDEX !== undefined ? e.payload.QUERY_INDEX : 0;
   var stationSlug  = e.payload.QUERY_STATION || '';
@@ -232,4 +247,51 @@ Pebble.addEventListener('appmessage', function(e) {
     case OP.REFRESH_STATIONS:     handleRefreshStations();                             break;
     default: console.warn('[pkjs] unknown op: ' + op);
   }
+});
+
+Pebble.addEventListener('showConfiguration', function() {
+  console.log('[pkjs] showConfiguration');
+
+  function openConfig(favJson) {
+    var url = WORKER_BASE + '/config.html?favs=' + encodeURIComponent(favJson || '[]');
+    console.log('[pkjs] openURL ' + url);
+    Pebble.openURL(url);
+  }
+
+  // Ask watch for current favorites; fall back to empty list after 4s
+  s_config_cb = openConfig;
+  sendDict({ DATA_TYPE: DATA_TYPE.FAVORITES_REQUEST }, null);
+  setTimeout(function() {
+    if (s_config_cb) {
+      console.warn('[pkjs] showConfiguration: watch timeout, opening with empty list');
+      var cb = s_config_cb;
+      s_config_cb = null;
+      cb('[]');
+    }
+  }, 4000);
+});
+
+Pebble.addEventListener('webviewclosed', function(e) {
+  if (!e.response) { console.log('[pkjs] config: cancelled'); return; }
+  var changes;
+  try {
+    changes = JSON.parse(decodeURIComponent(e.response));
+  } catch(err) {
+    console.error('[pkjs] config parse error: ' + err.message);
+    return;
+  }
+  if (!Array.isArray(changes) || changes.length === 0) return;
+
+  // Send one RENAME_FAVORITE message per changed entry, sequenced via callbacks
+  function next(k) {
+    if (k >= changes.length) { console.log('[pkjs] config: all renames sent'); return; }
+    var c = changes[k];
+    console.log('[pkjs] config: renaming fav ' + c.i + ' to "' + c.n + '"');
+    sendDict({
+      DATA_TYPE:    DATA_TYPE.RENAME_FAVORITE,
+      RENAME_INDEX: c.i | 0,
+      RENAME_NAME:  c.n || ''
+    }, function() { next(k + 1); });
+  }
+  next(0);
 });

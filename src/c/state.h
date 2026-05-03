@@ -8,6 +8,7 @@
 #define MAX_STATIONS           100
 #define MAX_ROUTES_PER_STATION 12
 #define MAX_FAV_ROUTES          8
+#define FAVORITE_NAME_LEN      24
 
 // ─── Stations cache ──────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ typedef struct {
     char route[4]; // null-terminated
     char dir;      // 'N','S','E','W'
   } routes[MAX_FAV_ROUTES];
+  char name[FAVORITE_NAME_LEN]; // user-visible nickname; "" falls back to slug_to_display
 } Favorite;
 
 // ─── Persistent storage key allocation ───────────────────────────────────────
@@ -81,6 +83,7 @@ typedef struct {
 #define PERSIST_KEY_FAVORITES_BASE      201 // keys 201..216
 
 #define SCHEMA_V_NAMES_DROPPED 1
+#define SCHEMA_V_USER_NAMES    2
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 
@@ -101,6 +104,7 @@ Favorite  *state_get_favorite(uint8_t index);
 void       state_add_favorite(const Favorite *fav);
 void       state_remove_favorite(uint8_t index);
 void       state_swap_favorites(uint8_t a, uint8_t b);
+void       state_set_favorite_name(uint8_t index, const char *name);
 
 // Arrivals cache
 // index: 0..(MAX_FAVORITES-1) for saved slots, QUERY_INDEX_TRANSIENT for search
