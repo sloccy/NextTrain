@@ -13,13 +13,16 @@ function xhrGet(url, cb) {
   xhr.onload = function() {
     console.log('[stations] xhrGet status=' + xhr.status + ' len=' + xhr.responseText.length);
     if (xhr.status >= 200 && xhr.status < 300) {
+      var parsed;
       try {
         // '' + coerces STPyV8 JSObject → JS string before JSON.parse
-        cb(null, JSON.parse('' + xhr.responseText));
+        parsed = JSON.parse('' + xhr.responseText);
       } catch(e) {
         console.error('[stations] JSON parse error: ' + e.message);
         cb(new Error('parse error'), null);
+        return;
       }
+      cb(null, parsed);
     } else {
       console.error('[stations] HTTP error: ' + xhr.status);
       cb(new Error('HTTP ' + xhr.status), null);
@@ -43,12 +46,15 @@ module.exports.load = function(workerBase, cb) {
   if (raw) {
     if (age < TTL_SECONDS) {
       console.log('[stations] cache hit, age=' + age + 's, len=' + raw.length);
+      var parsed = null;
       try {
-        var parsed = JSON.parse(raw);
-        console.log('[stations] cache parsed OK, station_count=' + ((parsed.s || []).length));
-        return cb(null, parsed);
+        parsed = JSON.parse(raw);
       } catch(e) {
         console.warn('[stations] cache parse error: ' + e.message + ', falling through to fetch');
+      }
+      if (parsed) {
+        console.log('[stations] cache parsed OK, station_count=' + ((parsed.s || []).length));
+        return cb(null, parsed);
       }
     } else {
       console.log('[stations] cache expired, age=' + age + 's (ttl=' + TTL_SECONDS + 's)');
@@ -119,9 +125,6 @@ module.exports.pack = function(data) {
     });
   });
 
-  var buf  = new ArrayBuffer(bytes.length);
-  var view = new Uint8Array(buf);
-  for (var i = 0; i < bytes.length; i++) view[i] = bytes[i];
-  return buf;
+  return new Uint8Array(bytes);
 };
 

@@ -46,9 +46,6 @@ module.exports = {
       util.lpStr(bytes, a.l  || '');
     });
 
-    var buf = new ArrayBuffer(bytes.length);
-    var view = new Uint8Array(buf);
-    for (var i = 0; i < bytes.length; i++) view[i] = bytes[i];
-    return buf;
+    return new Uint8Array(bytes);
   },
 };
