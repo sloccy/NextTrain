@@ -10,8 +10,9 @@
 
 static Window    *s_sta_window;
 static MenuLayer *s_sta_menu;
-static TextLayer *s_sta_loading;
 static bool       s_sta_error;
+
+static void prv_sta_stations_ready(void);
 
 static uint16_t prv_sta_num_rows(MenuLayer *ml, uint16_t s, void *ctx) {
   if (s_sta_error) return 1;
