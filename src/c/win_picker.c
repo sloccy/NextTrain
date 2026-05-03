@@ -8,11 +8,43 @@
 
 // ─── Station Picker ───────────────────────────────────────────────────────────
 
+#define STA_WATCHDOG_MS 6000
+
 static Window    *s_sta_window;
 static MenuLayer *s_sta_menu;
 static bool       s_sta_error;
+static AppTimer  *s_sta_watchdog;
 
 static void prv_sta_stations_ready(void);
+static void prv_sta_status(uint8_t qi, CommStatus status);
+
+static void prv_sta_cancel_watchdog(const char *why) {
+  if (s_sta_watchdog) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "[picker] watchdog cancelled (%s)", why);
+    app_timer_cancel(s_sta_watchdog);
+    s_sta_watchdog = NULL;
+  }
+}
+
+static void prv_sta_watchdog_fire(void *ctx) {
+  s_sta_watchdog = NULL;
+  StationsCache *stations = state_get_stations();
+  if (stations && stations->valid) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "[picker] watchdog fired but stations valid, ignoring");
+    return;
+  }
+  APP_LOG(APP_LOG_LEVEL_WARNING,
+          "[picker] watchdog: no JS response in %dms — phone JS may be down or worker unreachable",
+          STA_WATCHDOG_MS);
+  s_sta_error = true;
+  if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
+}
+
+static void prv_sta_arm_watchdog(void) {
+  prv_sta_cancel_watchdog("re-arm");
+  APP_LOG(APP_LOG_LEVEL_INFO, "[picker] arming %dms watchdog for stations response", STA_WATCHDOG_MS);
+  s_sta_watchdog = app_timer_register(STA_WATCHDOG_MS, prv_sta_watchdog_fire, NULL);
+}
 
 static uint16_t prv_sta_num_rows(MenuLayer *ml, uint16_t s, void *ctx) {
   if (s_sta_error) return 1;
@@ -47,13 +79,13 @@ static void prv_sta_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, v
 
 static void prv_sta_status(uint8_t qi, CommStatus status) {
   APP_LOG(APP_LOG_LEVEL_WARNING, "[picker] sta_status fired: status=%d qi=%d", (int)status, (int)qi);
+  prv_sta_cancel_watchdog("status received");
   StationsCache *stations = state_get_stations();
   if (stations && stations->valid) {
     APP_LOG(APP_LOG_LEVEL_INFO, "[picker] sta_status: stations already valid, ignoring");
     return;
   }
   s_sta_error = true;
-  comm_set_status_callback(NULL);
   if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
 }
 
@@ -63,6 +95,7 @@ static void prv_sta_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
     comm_set_stations_ready_callback(prv_sta_stations_ready);
     comm_set_status_callback(prv_sta_status);
     comm_request_stations_version();
+    prv_sta_arm_watchdog();
     if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
     return;
   }
@@ -75,6 +108,8 @@ static void prv_sta_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
 
 static void prv_sta_stations_ready(void) {
   APP_LOG(APP_LOG_LEVEL_INFO, "[picker] sta_stations_ready fired");
+  prv_sta_cancel_watchdog("stations ready");
+  s_sta_error = false;
   if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
 }
 
@@ -99,9 +134,17 @@ static void prv_sta_window_load(Window *win) {
 
   comm_set_stations_ready_callback(prv_sta_stations_ready);
   comm_set_status_callback(prv_sta_status);
+
+  // If stations aren't loaded, kick a fresh request and start a watchdog so we
+  // surface a hang (no JS response) instead of spinning on "Loading stations…"
+  if (!existing || !existing->valid) {
+    comm_request_stations_version();
+    prv_sta_arm_watchdog();
+  }
 }
 
 static void prv_sta_window_unload(Window *win) {
+  prv_sta_cancel_watchdog("window unload");
   comm_set_stations_ready_callback(NULL);
   comm_set_status_callback(NULL);
   menu_layer_destroy(s_sta_menu);

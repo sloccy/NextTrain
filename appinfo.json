@@ -5,6 +5,7 @@
   "companyName": "Brendan Slocum",
   "versionLabel": "1.0",
   "sdkVersion": "3",
+  "enableMultiJS": true,
   "targetPlatforms": ["emery"],
   "watchapp": {
     "watchface": false

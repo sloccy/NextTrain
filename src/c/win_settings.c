@@ -3,9 +3,32 @@
 #include "comm.h"
 #include "state.h"
 
+#define REFRESH_WATCHDOG_MS 8000
+
 static Window    *s_window;
 static MenuLayer *s_menu;
 static bool       s_refreshing;
+static AppTimer  *s_watchdog;
+
+static void prv_cancel_watchdog(const char *why) {
+  if (s_watchdog) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "[settings] watchdog cancelled (%s)", why);
+    app_timer_cancel(s_watchdog);
+    s_watchdog = NULL;
+  }
+}
+
+static void prv_watchdog_fire(void *ctx) {
+  s_watchdog = NULL;
+  if (!s_refreshing) return;
+  APP_LOG(APP_LOG_LEVEL_WARNING,
+          "[settings] watchdog: no JS response in %dms — phone JS may be down or worker unreachable",
+          REFRESH_WATCHDOG_MS);
+  s_refreshing = false;
+  comm_set_status_callback(NULL);
+  comm_set_stations_ready_callback(NULL);
+  if (s_menu) menu_layer_reload_data(s_menu);
+}
 
 static uint16_t prv_num_rows(MenuLayer *ml, uint16_t s, void *ctx) { return 2; }
 static int16_t  prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) { return 44; }
@@ -21,6 +44,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
 
 static void prv_status(uint8_t qi, CommStatus status) {
   APP_LOG(APP_LOG_LEVEL_WARNING, "[settings] refresh status callback: status=%d", (int)status);
+  prv_cancel_watchdog("status received");
   s_refreshing = false;
   comm_set_status_callback(NULL);
   if (s_menu) menu_layer_reload_data(s_menu);
@@ -28,6 +52,7 @@ static void prv_status(uint8_t qi, CommStatus status) {
 
 static void prv_stations_ready(void) {
   APP_LOG(APP_LOG_LEVEL_INFO, "[settings] stations_ready callback fired");
+  prv_cancel_watchdog("stations ready");
   s_refreshing = false;
   comm_set_stations_ready_callback(NULL);
   comm_set_status_callback(NULL);
@@ -36,12 +61,13 @@ static void prv_stations_ready(void) {
 
 static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   if (idx->row == 0 && !s_refreshing) {
-    APP_LOG(APP_LOG_LEVEL_INFO, "[settings] refresh requested");
+    APP_LOG(APP_LOG_LEVEL_INFO, "[settings] refresh requested, arming %dms watchdog", REFRESH_WATCHDOG_MS);
     s_refreshing = true;
     menu_layer_reload_data(s_menu);
     comm_set_stations_ready_callback(prv_stations_ready);
     comm_set_status_callback(prv_status);
     comm_request_refresh_stations();
+    s_watchdog = app_timer_register(REFRESH_WATCHDOG_MS, prv_watchdog_fire, NULL);
   } else if (idx->row == 1) {
     win_edit_favorites_push();
   }
@@ -65,6 +91,7 @@ static void prv_window_load(Window *win) {
 }
 
 static void prv_window_unload(Window *win) {
+  prv_cancel_watchdog("window unload");
   comm_set_stations_ready_callback(NULL);
   comm_set_status_callback(NULL);
   menu_layer_destroy(s_menu);
