@@ -20,12 +20,14 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
 }
 
 static void prv_status(uint8_t qi, CommStatus status) {
+  APP_LOG(APP_LOG_LEVEL_WARNING, "[settings] refresh status callback: status=%d", (int)status);
   s_refreshing = false;
   comm_set_status_callback(NULL);
   if (s_menu) menu_layer_reload_data(s_menu);
 }
 
 static void prv_stations_ready(void) {
+  APP_LOG(APP_LOG_LEVEL_INFO, "[settings] stations_ready callback fired");
   s_refreshing = false;
   comm_set_stations_ready_callback(NULL);
   comm_set_status_callback(NULL);
@@ -34,6 +36,7 @@ static void prv_stations_ready(void) {
 
 static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   if (idx->row == 0 && !s_refreshing) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "[settings] refresh requested");
     s_refreshing = true;
     menu_layer_reload_data(s_menu);
     comm_set_stations_ready_callback(prv_stations_ready);

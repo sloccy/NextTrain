@@ -46,8 +46,12 @@ static void prv_sta_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, v
 }
 
 static void prv_sta_status(uint8_t qi, CommStatus status) {
+  APP_LOG(APP_LOG_LEVEL_WARNING, "[picker] sta_status fired: status=%d qi=%d", (int)status, (int)qi);
   StationsCache *stations = state_get_stations();
-  if (stations && stations->valid) return; // already loaded, ignore
+  if (stations && stations->valid) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "[picker] sta_status: stations already valid, ignoring");
+    return;
+  }
   s_sta_error = true;
   comm_set_status_callback(NULL);
   if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
@@ -70,10 +74,14 @@ static void prv_sta_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
 }
 
 static void prv_sta_stations_ready(void) {
+  APP_LOG(APP_LOG_LEVEL_INFO, "[picker] sta_stations_ready fired");
   if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
 }
 
 static void prv_sta_window_load(Window *win) {
+  StationsCache *existing = state_get_stations();
+  APP_LOG(APP_LOG_LEVEL_INFO, "[picker] sta_window_load: stations_valid=%s",
+          (existing && existing->valid) ? "YES" : "NO");
   Layer *root = window_get_root_layer(win);
   GRect bounds = layer_get_bounds(root);
 

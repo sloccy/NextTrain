@@ -24,33 +24,46 @@ function enqueue(fn) {
 }
 
 function drain() {
-  if (s_queue.length === 0) { s_in_flight = false; return; }
+  if (s_queue.length === 0) { s_in_flight = false; console.log('[pkjs] queue drained'); return; }
   s_in_flight = true;
+  console.log('[pkjs] drain: ' + s_queue.length + ' item(s) remaining');
   var fn = s_queue.shift();
   fn();
 }
 
 // ─── Send helpers ──────────────────────────────────────────────────────────────
 
+var STATUS_NAMES = { 0: 'OK', 1: 'OFFLINE', 2: 'NO_DATA', 3: 'ERROR' };
+
 function sendStatus(queryIndex, code) {
+  console.log('[pkjs] sendStatus qi=' + queryIndex + ' code=' + (STATUS_NAMES[code] || code));
   Pebble.sendAppMessage({ MSG_STATUS: code, MSG_QUERY_INDEX: queryIndex },
-    function() {}, function(e) { console.warn('[pkjs] send failed: ' + JSON.stringify(e)); });
+    function() { console.log('[pkjs] sendStatus ACK'); },
+    function(e) { console.error('[pkjs] sendStatus FAILED: ' + JSON.stringify(e)); });
 }
 
 function sendDict(dict, cb) {
+  var keys = Object.keys(dict).join(',');
+  console.log('[pkjs] sendDict keys=[' + keys + ']');
   Pebble.sendAppMessage(dict,
-    function() { cb && cb(); },
-    function(e) { console.warn('[pkjs] send failed: ' + JSON.stringify(e)); cb && cb(); });
+    function() { console.log('[pkjs] sendDict ACK keys=[' + keys + ']'); cb && cb(); },
+    function(e) { console.error('[pkjs] sendDict FAILED keys=[' + keys + ']: ' + JSON.stringify(e)); cb && cb(); });
 }
 
 // ─── Stations version ─────────────────────────────────────────────────────────
 
 function handleGetStationsVersion() {
+  console.log('[pkjs] handleGetStationsVersion');
   enqueue(function() {
     stationsModule.load(WORKER_BASE, function(err, data) {
-      if (err) { sendStatus(0, STATUS.OFFLINE); drain(); return; }
+      if (err) {
+        console.error('[pkjs] stations load error: ' + err.message);
+        sendStatus(0, STATUS.OFFLINE); drain(); return;
+      }
+      var version = data.g | 0;
+      console.log('[pkjs] sending STATIONS_VERSION=' + version);
       sendDict({ MSG_DATA_TYPE: DATA_TYPE.STATIONS_VERSION,
-                 MSG_STATIONS_VERSION: (data.g | 0) },
+                 MSG_STATIONS_VERSION: version },
                drain);
     });
   });
@@ -61,22 +74,30 @@ function handleGetStationsVersion() {
 var CHUNK_SIZE = 500; // bytes per AppMessage chunk
 
 function handleGetStationsFull() {
+  console.log('[pkjs] handleGetStationsFull');
   enqueue(function() {
     stationsModule.load(WORKER_BASE, function(err, data) {
-      if (err) { sendStatus(0, STATUS.OFFLINE); drain(); return; }
+      if (err) {
+        console.error('[pkjs] stations load error: ' + err.message);
+        sendStatus(0, STATUS.OFFLINE); drain(); return;
+      }
       var blob = stationsModule.pack(data);
-      if (!blob) { sendStatus(0, STATUS.ERROR); drain(); return; }
-
+      if (!blob) {
+        console.error('[pkjs] stations pack returned null');
+        sendStatus(0, STATUS.ERROR); drain(); return;
+      }
       var total  = Math.ceil(blob.byteLength / CHUNK_SIZE);
+      console.log('[pkjs] blob=' + blob.byteLength + 'B, chunks=' + total + ' x ' + CHUNK_SIZE + 'B');
       var index  = 0;
 
       function sendChunk() {
-        if (index >= total) { drain(); return; }
+        if (index >= total) { console.log('[pkjs] all chunks sent'); drain(); return; }
         var start   = index * CHUNK_SIZE;
         var end     = Math.min(start + CHUNK_SIZE, blob.byteLength);
         var slice   = blob.slice(start, end);
         var i       = index;
         index++;
+        console.log('[pkjs] sending chunk ' + (i+1) + '/' + total + ' (' + (end-start) + 'B)');
         sendDict({
           MSG_DATA_TYPE:   DATA_TYPE.STATIONS_CHUNK,
           MSG_CHUNK_INDEX: i,
@@ -92,15 +113,22 @@ function handleGetStationsFull() {
 // ─── Arrivals ─────────────────────────────────────────────────────────────────
 
 function handleGetArrivals(queryIndex, stationSlug, routesStr) {
+  console.log('[pkjs] handleGetArrivals qi=' + queryIndex + ' sta=' + stationSlug + ' routes=' + routesStr);
   enqueue(function() {
     stationsModule.load(WORKER_BASE, function(err, stationsData) {
-      if (err || !stationsData) { sendStatus(queryIndex, STATUS.OFFLINE); drain(); return; }
+      if (err || !stationsData) {
+        console.error('[pkjs] arrivals: stations load error: ' + (err ? err.message : 'null data'));
+        sendStatus(queryIndex, STATUS.OFFLINE); drain(); return;
+      }
 
       var station = null;
       (stationsData.s || []).forEach(function(s) {
         if (s.k === stationSlug) station = s;
       });
-      if (!station) { sendStatus(queryIndex, STATUS.NO_DATA); drain(); return; }
+      if (!station) {
+        console.error('[pkjs] arrivals: station not found: ' + stationSlug);
+        sendStatus(queryIndex, STATUS.NO_DATA); drain(); return;
+      }
 
       var url = WORKER_BASE + '/arrivals'
               + '?station=' + encodeURIComponent(stationSlug)
@@ -140,12 +168,17 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
 // ─── Refresh stations ─────────────────────────────────────────────────────────
 
 function handleRefreshStations() {
+  console.log('[pkjs] handleRefreshStations: invalidating cache');
   enqueue(function() {
     stationsModule.invalidate();
-    stationsModule.load(WORKER_BASE, function(err) {
-      if (err) { sendStatus(0, STATUS.OFFLINE); drain(); return; }
+    stationsModule.load(WORKER_BASE, function(err, data) {
+      if (err) {
+        console.error('[pkjs] refresh: stations load error: ' + err.message);
+        sendStatus(0, STATUS.OFFLINE); drain(); return;
+      }
+      console.log('[pkjs] refresh: load OK, station_count=' + ((data && data.s) ? data.s.length : 0) + ', sending version=0 to force re-sync');
       sendDict({ MSG_DATA_TYPE: DATA_TYPE.STATIONS_VERSION,
-                 MSG_STATIONS_VERSION: 0 }, // force watch re-sync
+                 MSG_STATIONS_VERSION: 0 },
                drain);
     });
   });

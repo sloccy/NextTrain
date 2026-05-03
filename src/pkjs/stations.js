@@ -11,15 +11,20 @@ function xhrGet(url, cb) {
   xhr.open('GET', url, true);
   xhr.timeout = util.XHR_TIMEOUT_MS;
   xhr.onload = function() {
+    console.log('[stations] xhrGet status=' + xhr.status + ' len=' + xhr.responseText.length);
     if (xhr.status >= 200 && xhr.status < 300) {
       try { cb(null, JSON.parse(xhr.responseText)); }
-      catch(e) { cb(new Error('parse error'), null); }
+      catch(e) {
+        console.error('[stations] JSON parse error: ' + e.message);
+        cb(new Error('parse error'), null);
+      }
     } else {
+      console.error('[stations] HTTP error: ' + xhr.status);
       cb(new Error('HTTP ' + xhr.status), null);
     }
   };
-  xhr.onerror   = function() { cb(new Error('network'), null); };
-  xhr.ontimeout = function() { cb(new Error('timeout'), null); };
+  xhr.onerror   = function() { console.error('[stations] network error'); cb(new Error('network'), null); };
+  xhr.ontimeout = function() { console.error('[stations] timeout after ' + util.XHR_TIMEOUT_MS + 'ms'); cb(new Error('timeout'), null); };
   xhr.send();
 }
 
@@ -29,13 +34,35 @@ module.exports.load = function(workerBase, cb) {
   var raw = localStorage.getItem(CACHE_KEY_DATA);
   var ts  = parseInt(localStorage.getItem(CACHE_KEY_TS) || '0', 10);
   var now = Math.floor(Date.now() / 1000);
+  var age = now - ts;
 
-  if (raw && (now - ts) < TTL_SECONDS) {
-    try { return cb(null, JSON.parse(raw)); } catch(e) { /* corrupt cache, fall through to fetch */ }
+  if (raw) {
+    if (age < TTL_SECONDS) {
+      console.log('[stations] cache hit, age=' + age + 's, len=' + raw.length);
+      try {
+        var parsed = JSON.parse(raw);
+        console.log('[stations] cache parsed OK, station_count=' + ((parsed.s || []).length));
+        return cb(null, parsed);
+      } catch(e) {
+        console.warn('[stations] cache parse error: ' + e.message + ', falling through to fetch');
+      }
+    } else {
+      console.log('[stations] cache expired, age=' + age + 's (ttl=' + TTL_SECONDS + 's)');
+    }
+  } else {
+    console.log('[stations] no cache, fetching from network');
   }
 
-  xhrGet(workerBase + '/stations', function(err, data) {
-    if (err) { cb(err, null); return; }
+  var url = workerBase + '/stations';
+  console.log('[stations] XHR GET ' + url);
+  xhrGet(url, function(err, data) {
+    if (err) {
+      console.error('[stations] XHR failed: ' + err.message);
+      cb(err, null);
+      return;
+    }
+    var count = (data && data.s) ? data.s.length : 0;
+    console.log('[stations] XHR OK, station_count=' + count + ' generated_at=' + (data && data.g));
     localStorage.setItem(CACHE_KEY_DATA, JSON.stringify(data));
     localStorage.setItem(CACHE_KEY_TS, String(Math.floor(Date.now() / 1000)));
     cb(null, data);

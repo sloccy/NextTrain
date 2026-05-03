@@ -47,6 +47,7 @@ static ArrivalCache prv_parse_arrivals_payload(const uint8_t *data, size_t len,
 void comm_init(void) {
   memset(s_queue, 0, sizeof(s_queue));
   s_sending = false;
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] init");
 }
 
 void comm_deinit(void) {
@@ -100,12 +101,19 @@ static void prv_send_next(void) {
   for (int i = 0; i < QUEUE_SIZE; i++) {
     if (s_queue[i].used) { entry = &s_queue[i]; break; }
   }
-  if (!entry) return;
+  if (!entry) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "[comm] send_next: queue empty");
+    return;
+  }
+
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] send_next: op=%d idx=%d sta='%s'",
+          (int)entry->op, (int)entry->index,
+          entry->station[0] ? entry->station : "(none)");
 
   DictionaryIterator *iter;
   AppMessageResult result = app_message_outbox_begin(&iter);
   if (result != APP_MSG_OK || !iter) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] outbox begin failed: %d", (int)result);
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] outbox_begin failed: %d", (int)result);
     prv_drop_front_entry(true);
     return;
   }
@@ -119,10 +127,11 @@ static void prv_send_next(void) {
 
   result = app_message_outbox_send();
   if (result != APP_MSG_OK) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] outbox send failed: %d", (int)result);
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] outbox_send failed: %d", (int)result);
     return;
   }
 
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "[comm] outbox_send OK");
   s_sending = true;
 }
 
@@ -147,54 +156,73 @@ void comm_request_refresh_stations(void) {
 // ─── Outbox callbacks ─────────────────────────────────────────────────────────
 
 void comm_outbox_sent(DictionaryIterator *iter) {
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] outbox_sent ACK");
   prv_drop_front_entry(false);
   prv_send_next();
 }
 
 void comm_outbox_failed(DictionaryIterator *iter, AppMessageResult reason) {
-  APP_LOG(APP_LOG_LEVEL_WARNING, "[comm] outbox failed: %d, dropping entry", (int)reason);
+  APP_LOG(APP_LOG_LEVEL_WARNING, "[comm] outbox_failed reason=%d, dropping entry", (int)reason);
   s_sending = false;
   prv_drop_front_entry(true);
   prv_send_next();
 }
 
 void comm_inbox_dropped(AppMessageResult reason) {
-  APP_LOG(APP_LOG_LEVEL_WARNING, "[comm] inbox dropped: %d", (int)reason);
+  APP_LOG(APP_LOG_LEVEL_WARNING, "[comm] inbox_dropped reason=%d (message lost!)", (int)reason);
 }
 
 // ─── Inbox dispatcher ─────────────────────────────────────────────────────────
 
 void comm_inbox_received(DictionaryIterator *iter) {
   Tuple *dt = dict_find(iter, MSG_DATA_TYPE);
+  Tuple *st = dict_find(iter, MSG_STATUS);
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] inbox_received: data_type=%s status=%s",
+          dt ? "YES" : "NO", st ? "YES" : "NO");
   if (dt) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "[comm]   data_type=%d", (int)dt->value->uint8);
     switch ((DataType)dt->value->uint8) {
       case DATA_TYPE_STATIONS_VERSION: prv_handle_stations_version(iter); return;
       case DATA_TYPE_STATIONS_CHUNK:   prv_handle_stations_chunk(iter);   return;
       case DATA_TYPE_ARRIVALS:         prv_handle_arrivals(iter);          return;
+      default:
+        APP_LOG(APP_LOG_LEVEL_WARNING, "[comm]   unknown data_type=%d", (int)dt->value->uint8);
+        return;
     }
   }
-  Tuple *st = dict_find(iter, MSG_STATUS);
-  if (st) prv_handle_status(iter);
+  if (st) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "[comm]   status msg, value=%d", (int)st->value->uint8);
+    prv_handle_status(iter);
+    return;
+  }
+  APP_LOG(APP_LOG_LEVEL_WARNING, "[comm] inbox_received: no data_type or status key!");
 }
 
 // ─── Inbound handlers ─────────────────────────────────────────────────────────
 
 static void prv_handle_stations_version(DictionaryIterator *iter) {
   Tuple *vt = dict_find(iter, MSG_STATIONS_VERSION);
-  if (!vt) return;
+  if (!vt) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] stations_version msg missing version key!");
+    return;
+  }
   uint32_t phone_version = vt->value->uint32;
   uint32_t watch_version = state_get_persisted_stations_version();
 
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "[comm] stations version: phone=%lu watch=%lu",
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] stations_version: phone=%lu watch=%lu",
           (unsigned long)phone_version, (unsigned long)watch_version);
 
   if (phone_version != watch_version) {
-    APP_LOG(APP_LOG_LEVEL_INFO, "[comm] stations stale, requesting full sync");
+    APP_LOG(APP_LOG_LEVEL_INFO, "[comm] versions differ, requesting full sync");
     comm_request_stations_full();
   } else {
+    APP_LOG(APP_LOG_LEVEL_INFO, "[comm] versions match, loading from persist");
     if (state_load_stations_from_persist()) {
+      APP_LOG(APP_LOG_LEVEL_INFO, "[comm] persist load OK, firing sta_cb=%s",
+              s_sta_cb ? "SET" : "NULL");
       if (s_sta_cb) s_sta_cb();
     } else {
+      APP_LOG(APP_LOG_LEVEL_WARNING, "[comm] persist load FAILED, requesting full sync");
       comm_request_stations_full();
     }
   }
@@ -204,7 +232,11 @@ static void prv_handle_stations_chunk(DictionaryIterator *iter) {
   Tuple *ci = dict_find(iter, MSG_CHUNK_INDEX);
   Tuple *ct = dict_find(iter, MSG_CHUNK_TOTAL);
   Tuple *pl = dict_find(iter, MSG_PAYLOAD);
-  if (!ci || !ct || !pl) return;
+  if (!ci || !ct || !pl) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] chunk missing keys: ci=%s ct=%s pl=%s",
+            ci ? "OK" : "MISSING", ct ? "OK" : "MISSING", pl ? "OK" : "MISSING");
+    return;
+  }
 
   uint16_t chunk_index = ci->value->uint16;
   uint16_t chunk_total = ct->value->uint16;
@@ -212,15 +244,24 @@ static void prv_handle_stations_chunk(DictionaryIterator *iter) {
   uint16_t data_len    = pl->length;
 
   if (chunk_index == 0) {
-    // First chunk: allocate assembly buffer
     if (s_blob) free(s_blob);
-    s_blob = malloc(16384); // max expected blob size
+    s_blob = malloc(16384);
     s_blob_used    = 0;
     s_total_chunks = chunk_total;
     s_recv_chunks  = 0;
+    APP_LOG(APP_LOG_LEVEL_INFO, "[comm] chunk alloc: total_chunks=%u blob=%s",
+            chunk_total, s_blob ? "OK" : "MALLOC FAILED");
   }
 
-  if (!s_blob || chunk_index != s_recv_chunks) return; // out-of-order
+  if (!s_blob) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] chunk: no blob buffer");
+    return;
+  }
+  if (chunk_index != s_recv_chunks) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] chunk out-of-order: got=%u expected=%u",
+            chunk_index, s_recv_chunks);
+    return;
+  }
 
   if (s_blob_used + data_len <= 16384) {
     memcpy(s_blob + s_blob_used, data, data_len);
@@ -228,14 +269,20 @@ static void prv_handle_stations_chunk(DictionaryIterator *iter) {
   }
   s_recv_chunks++;
 
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "[comm] stations chunk %u/%u", chunk_index + 1, chunk_total);
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] chunk %u/%u (%u bytes, total_so_far=%lu)",
+          chunk_index + 1, chunk_total, data_len, (unsigned long)s_blob_used);
 
   if (s_recv_chunks == s_total_chunks) {
-    APP_LOG(APP_LOG_LEVEL_INFO, "[comm] stations sync complete (%lu bytes)", (unsigned long)s_blob_used);
+    APP_LOG(APP_LOG_LEVEL_INFO, "[comm] all chunks received, blob=%lu bytes",
+            (unsigned long)s_blob_used);
     state_persist_stations_blob(s_blob, s_blob_used);
     free(s_blob); s_blob = NULL;
     if (state_load_stations_from_persist()) {
+      APP_LOG(APP_LOG_LEVEL_INFO, "[comm] stations loaded from persist, sta_cb=%s",
+              s_sta_cb ? "SET" : "NULL");
       if (s_sta_cb) s_sta_cb();
+    } else {
+      APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] persist load FAILED after full sync!");
     }
   }
 }
@@ -257,12 +304,25 @@ static void prv_handle_arrivals(DictionaryIterator *iter) {
   if (s_arr_cb) s_arr_cb(query_index, &cache);
 }
 
+static const char *prv_status_name(CommStatus s) {
+  switch (s) {
+    case STATUS_OK:      return "OK";
+    case STATUS_OFFLINE: return "OFFLINE";
+    case STATUS_NO_DATA: return "NO_DATA";
+    case STATUS_ERROR:   return "ERROR";
+    default:             return "UNKNOWN";
+  }
+}
+
 static void prv_handle_status(DictionaryIterator *iter) {
   Tuple *st = dict_find(iter, MSG_STATUS);
   Tuple *qi = dict_find(iter, MSG_QUERY_INDEX);
   if (!st) return;
   uint8_t status      = st->value->uint8;
   uint8_t query_index = qi ? qi->value->uint8 : QUERY_INDEX_TRANSIENT;
+  APP_LOG(APP_LOG_LEVEL_WARNING, "[comm] status: %s (%d) for query_index=%d, cb=%s",
+          prv_status_name((CommStatus)status), (int)status, (int)query_index,
+          s_status_cb ? "SET" : "NULL");
   if (s_status_cb) s_status_cb(query_index, (CommStatus)status);
 }
 
