@@ -38,9 +38,10 @@ static void prv_handle_stations_version(DictionaryIterator *iter);
 static void prv_handle_stations_chunk(DictionaryIterator *iter);
 static void prv_handle_arrivals(DictionaryIterator *iter);
 static void prv_handle_status(DictionaryIterator *iter);
-static ArrivalCache prv_parse_arrivals_payload(const uint8_t *data, size_t len,
-                                                const char *station_name,
-                                                uint32_t next_refresh);
+static void prv_parse_arrivals_payload(ArrivalCache *cache,
+                                        const uint8_t *data, size_t len,
+                                        const char *station_name,
+                                        uint32_t next_refresh);
 
 // ─── Init / Deinit ────────────────────────────────────────────────────────────
 
@@ -291,20 +292,32 @@ static void prv_handle_stations_chunk(DictionaryIterator *iter) {
 }
 
 static void prv_handle_arrivals(DictionaryIterator *iter) {
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] handle_arrivals: enter");
   Tuple *qi = dict_find(iter, MESSAGE_KEY_QUERY_INDEX);
   Tuple *sn = dict_find(iter, MESSAGE_KEY_STATION_NAME);
   Tuple *nr = dict_find(iter, MESSAGE_KEY_NEXT_REFRESH);
   Tuple *pl = dict_find(iter, MESSAGE_KEY_PAYLOAD);
-  if (!qi || !pl) return;
+  if (!qi || !pl) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] handle_arrivals: missing qi=%s pl=%s",
+            qi ? "OK" : "MISSING", pl ? "OK" : "MISSING");
+    return;
+  }
 
   uint8_t query_index  = qi->value->uint8;
   const char *sta_name = sn ? sn->value->cstring : "Unknown";
   uint32_t next_ref    = nr ? nr->value->uint32 : 0;
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] handle_arrivals: qi=%d sta='%s' pl_len=%u next=%lu",
+          (int)query_index, sta_name, (unsigned)pl->length, (unsigned long)next_ref);
 
-  ArrivalCache cache = prv_parse_arrivals_payload(pl->value->data, pl->length,
-                                                   sta_name, next_ref);
-  state_set_arrival_cache(query_index, &cache);
-  if (s_arr_cb) s_arr_cb(query_index, &cache);
+  // Parse directly into the global cache slot — keeps ~728-byte ArrivalCache off
+  // the stack (returning by value blew the app stack and crashed the watch).
+  ArrivalCache *cache = state_get_arrival_cache(query_index);
+  state_clear_arrival_cache(query_index);
+  prv_parse_arrivals_payload(cache, pl->value->data, pl->length, sta_name, next_ref);
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] handle_arrivals: parsed count=%d cb=%s",
+          (int)cache->count, s_arr_cb ? "SET" : "NULL");
+  if (s_arr_cb) s_arr_cb(query_index, cache);
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] handle_arrivals: done");
 }
 
 static const char *prv_status_name(CommStatus s) {
@@ -331,14 +344,16 @@ static void prv_handle_status(DictionaryIterator *iter) {
 
 // ─── Arrivals payload parser ──────────────────────────────────────────────────
 
-static ArrivalCache prv_parse_arrivals_payload(const uint8_t *data, size_t len,
-                                                const char *station_name,
-                                                uint32_t next_refresh) {
-  ArrivalCache cache = {0};
-  strncpy(cache.station_name, station_name, sizeof(cache.station_name) - 1);
-  cache.next_refresh = next_refresh;
+static void prv_parse_arrivals_payload(ArrivalCache *cache,
+                                        const uint8_t *data, size_t len,
+                                        const char *station_name,
+                                        uint32_t next_refresh) {
+  // Caller is responsible for zeroing *cache (state_clear_arrival_cache).
+  strncpy(cache->station_name, station_name, sizeof(cache->station_name) - 1);
+  cache->next_refresh = next_refresh;
+  cache->valid        = true;
 
-  if (!data || len < 1) return cache;
+  if (!data || len < 1) return;
   const uint8_t *p   = data;
   const uint8_t *end = data + len;
 
@@ -346,19 +361,20 @@ static ArrivalCache prv_parse_arrivals_payload(const uint8_t *data, size_t len,
   if (count > MAX_ARRIVALS) count = MAX_ARRIVALS;
 
   for (uint8_t i = 0; i < count; i++) {
-    ArrivalEntry *e = &cache.entries[i];
+    ArrivalEntry *e = &cache->entries[i];
 
-    if (p + 4 > end) goto done;
+    if (p + 4 > end) return;
     e->r      = *p++;
     e->g      = *p++;
     e->b      = *p++;
     e->status = (ArrivalStatus)*p++;
 
-    // lpStr: [u8 len][bytes] — goto done exits the for loop on truncated data
+    // lpStr: [u8 len][bytes] — return on truncated data, leaving previously
+    // parsed entries intact (cache->count reflects fully-parsed entries only).
     #define LP(field) do { \
-      if (p >= end) goto done; \
+      if (p >= end) return; \
       uint8_t _l = *p++; \
-      if (p + _l > end) goto done; \
+      if (p + _l > end) return; \
       uint8_t _c = _l < sizeof(e->field) - 1 ? _l : sizeof(e->field) - 1; \
       memcpy(e->field, p, _c); e->field[_c] = 0; p += _l; \
     } while(0)
@@ -369,10 +385,6 @@ static ArrivalCache prv_parse_arrivals_payload(const uint8_t *data, size_t len,
     LP(label);
 
     #undef LP
-    cache.count++;
+    cache->count++;
   }
-done:
-
-  cache.valid = true;
-  return cache;
 }
