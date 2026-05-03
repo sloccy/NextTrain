@@ -141,7 +141,11 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
       xhr.onload = function() {
         var bodyStr = xhr.responseText ? '' + xhr.responseText : '';
         console.log('[pkjs] arrivals xhr status=' + xhr.status + ' len=' + bodyStr.length);
-        if (xhr.status === 503) { sendStatus(queryIndex, STATUS.NO_DATA); drain(); return; }
+        // Worker uses 404 to mean "no arrivals match this station/route/direction" — not a hard error.
+        if (xhr.status === 404 || xhr.status === 503) {
+          console.log('[pkjs] arrivals ' + xhr.status + ' → NO_DATA, body: ' + bodyStr.slice(0, 200));
+          sendStatus(queryIndex, STATUS.NO_DATA); drain(); return;
+        }
         if (xhr.status < 200 || xhr.status >= 300) {
           console.error('[pkjs] arrivals HTTP ' + xhr.status + ' body: ' + bodyStr.slice(0, 200));
           sendStatus(queryIndex, STATUS.ERROR); drain(); return;

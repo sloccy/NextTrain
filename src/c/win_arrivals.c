@@ -17,7 +17,9 @@ static Layer       *s_header_layer;
 static MenuLayer   *s_menu;
 static AppTimer    *s_refresh_timer;
 static ArrivalsParams s_params;
-static bool         s_waiting;   // true if no data yet for initial load
+static bool         s_waiting;       // true if no data yet for initial load
+static bool         s_have_status;   // true if last update was a status, not arrivals
+static CommStatus   s_last_status;
 
 // ─── Auto-refresh timer ───────────────────────────────────────────────────────
 
@@ -47,14 +49,17 @@ static void prv_do_refresh(void) {
 
 static void prv_arrivals_received(uint8_t query_index, const ArrivalCache *cache) {
   if (query_index != s_params.query_index) return;
-  s_waiting = false;
+  s_waiting     = false;
+  s_have_status = false;
   if (s_menu) menu_layer_reload_data(s_menu);
   if (cache->next_refresh) prv_schedule_refresh(cache->next_refresh);
 }
 
 static void prv_status_received(uint8_t query_index, CommStatus status) {
   if (query_index != s_params.query_index) return;
-  s_waiting = false;
+  s_waiting     = false;
+  s_have_status = true;
+  s_last_status = status;
   if (s_menu) menu_layer_reload_data(s_menu);
 }
 
@@ -83,13 +88,23 @@ static const ArrivalCache *prv_cache(void) {
   return state_get_arrival_cache(s_params.query_index);
 }
 
+// Layout: 0..N-1 arrival rows (or 1 status row if N == 0), then optional
+// "Add to Favorites" at the end in search mode.
+static uint8_t prv_arrival_count(void) {
+  const ArrivalCache *c = prv_cache();
+  return (c && c->valid) ? c->count : 0;
+}
+
+static uint16_t prv_add_fav_row(void) {
+  uint8_t arrivals = prv_arrival_count();
+  return arrivals == 0 ? 1 : arrivals; // status row occupies row 0 when empty
+}
+
 static uint16_t prv_num_rows(MenuLayer *ml, uint16_t s, void *ctx) {
   if (s_waiting) return 1; // "Loading…"
-  const ArrivalCache *c = prv_cache();
-  if (!c || !c->valid || c->count == 0) return 1; // "No upcoming trains" or error
-  uint8_t rows = c->count;
-  if (!s_params.from_favorite) rows++; // "Add to Favorites" row at end
-  return rows;
+  uint16_t base = prv_arrival_count();
+  if (base == 0) base = 1; // status / "no upcoming trains" row
+  return s_params.from_favorite ? base : base + 1;
 }
 
 static int16_t prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) {
@@ -111,21 +126,31 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   }
 
   const ArrivalCache *cache = prv_cache();
+  uint8_t arrivals = prv_arrival_count();
 
   // "Add to Favorites" row (last row in search mode)
-  if (!s_params.from_favorite && cache && idx->row == cache->count) {
+  if (!s_params.from_favorite && idx->row == prv_add_fav_row()) {
     menu_cell_basic_draw(ctx, cell, "\xe2\x98\x85 Add to Favorites", NULL, NULL);
     return;
   }
 
-  if (!cache || !cache->valid || cache->count == 0) {
-    graphics_draw_text(ctx, "No upcoming trains",
+  if (arrivals == 0) {
+    const char *msg = "No upcoming trains";
+    if (s_have_status) {
+      switch (s_last_status) {
+        case STATUS_OFFLINE: msg = "Offline";       break;
+        case STATUS_ERROR:   msg = "Service error"; break;
+        case STATUS_NO_DATA: msg = "No upcoming trains"; break;
+        default:             break;
+      }
+    }
+    graphics_draw_text(ctx, msg,
                        fonts_get_system_font(FONT_KEY_GOTHIC_18),
                        bounds, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
     return;
   }
 
-  if (idx->row >= cache->count) return;
+  if (idx->row >= arrivals) return;
   const ArrivalEntry *e = &cache->entries[idx->row];
 
   // Route icon
@@ -163,8 +188,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
 }
 
 static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
-  const ArrivalCache *cache = prv_cache();
-  if (!s_params.from_favorite && cache && idx->row == cache->count) {
+  if (!s_params.from_favorite && idx->row == prv_add_fav_row()) {
     // "Add to Favorites"
     Favorite fav;
     memset(&fav, 0, sizeof(fav));
@@ -248,8 +272,9 @@ static void prv_window_unload(Window *win) {
 // ─── Public ───────────────────────────────────────────────────────────────────
 
 void win_arrivals_push(const ArrivalsParams *params) {
-  s_params  = *params;
-  s_waiting = true;
+  s_params      = *params;
+  s_waiting     = true;
+  s_have_status = false;
 
   s_window = window_create();
   window_set_background_color(s_window, GColorWhite);
