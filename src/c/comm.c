@@ -120,6 +120,8 @@ static void prv_send_next(void) {
 
   dict_write_uint8(iter, MESSAGE_KEY_OP, entry->op);
   dict_write_uint8(iter, MESSAGE_KEY_QUERY_INDEX, entry->index);
+  if (entry->op == OP_GET_STATIONS_FULL)
+    dict_write_uint32(iter, MESSAGE_KEY_INBOX_SIZE, (uint32_t)app_message_inbox_size_maximum());
   if (entry->station[0])
     dict_write_cstring(iter, MESSAGE_KEY_QUERY_STATION, entry->station);
   if (entry->routes[0])

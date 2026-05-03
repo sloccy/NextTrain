@@ -71,10 +71,11 @@ function handleGetStationsVersion() {
 
 // ─── Stations full sync ────────────────────────────────────────────────────────
 
-var CHUNK_SIZE = 7500; // bytes per AppMessage chunk (Emery inbox max is 8192B)
-
-function handleGetStationsFull() {
-  console.log('[pkjs] handleGetStationsFull');
+function handleGetStationsFull(inboxSize) {
+  // Subtract 50B for AppMessage dict/tuple overhead (4 keys: DATA_TYPE, CHUNK_INDEX,
+  // CHUNK_TOTAL, PAYLOAD). Fall back to 500B if the watch didn't report its size.
+  var chunkSize = inboxSize > 100 ? inboxSize - 50 : 500;
+  console.log('[pkjs] handleGetStationsFull inboxSize=' + inboxSize + ' chunkSize=' + chunkSize);
   enqueue(function() {
     stationsModule.load(WORKER_BASE, function(err, data) {
       if (err) {
@@ -86,14 +87,14 @@ function handleGetStationsFull() {
         console.error('[pkjs] stations pack returned null');
         sendStatus(0, STATUS.ERROR); drain(); return;
       }
-      var total  = Math.ceil(blob.length / CHUNK_SIZE);
-      console.log('[pkjs] blob=' + blob.length + 'B, chunks=' + total + ' x ' + CHUNK_SIZE + 'B');
+      var total  = Math.ceil(blob.length / chunkSize);
+      console.log('[pkjs] blob=' + blob.length + 'B, chunks=' + total + ' x ' + chunkSize + 'B');
       var index  = 0;
 
       function sendChunk() {
         if (index >= total) { console.log('[pkjs] all chunks sent'); drain(); return; }
-        var start   = index * CHUNK_SIZE;
-        var end     = Math.min(start + CHUNK_SIZE, blob.length);
+        var start   = index * chunkSize;
+        var end     = Math.min(start + chunkSize, blob.length);
         var slice   = blob.slice(start, end);
         var i       = index;
         index++;
@@ -225,7 +226,7 @@ Pebble.addEventListener('appmessage', function(e) {
 
   switch (op) {
     case OP.GET_STATIONS_VERSION: handleGetStationsVersion();                          break;
-    case OP.GET_STATIONS_FULL:    handleGetStationsFull();                             break;
+    case OP.GET_STATIONS_FULL:    handleGetStationsFull(e.payload.INBOX_SIZE || 0);   break;
     case OP.GET_ARRIVALS:         handleGetArrivals(queryIndex, stationSlug, routesStr); break;
     case OP.REFRESH_STATIONS:     handleRefreshStations();                             break;
     default: console.warn('[pkjs] unknown op: ' + op);
