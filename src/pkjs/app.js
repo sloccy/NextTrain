@@ -71,7 +71,7 @@ function handleGetStationsVersion() {
 
 // ─── Stations full sync ────────────────────────────────────────────────────────
 
-var CHUNK_SIZE = 3500; // bytes per AppMessage chunk (Emery inbox is 4096B)
+var CHUNK_SIZE = 7500; // bytes per AppMessage chunk (Emery inbox max is 8192B)
 
 function handleGetStationsFull() {
   console.log('[pkjs] handleGetStationsFull');

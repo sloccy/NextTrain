@@ -6,12 +6,6 @@
 #include "win_home.h"
 #include "win_arrivals.h"
 
-// AppMessage inbox/outbox sizes.
-// Inbox: sized for one stations chunk. Emery supports up to 8192B; 4096 gives
-// ~50% headroom over the 3500B payload + ~50B tuple/dict overhead per chunk.
-// Outbox: queries are small (~200B max)
-#define INBOX_SIZE  4096
-#define OUTBOX_SIZE 256
 
 // ─── Background prefetch ──────────────────────────────────────────────────────
 
@@ -57,7 +51,7 @@ static void prv_init(void) {
   app_message_register_inbox_dropped(prv_inbox_dropped);
   app_message_register_outbox_sent(prv_outbox_sent);
   app_message_register_outbox_failed(prv_outbox_failed);
-  app_message_open(INBOX_SIZE, OUTBOX_SIZE);
+  app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
 
   // Push home first — renders immediately from persist
   win_home_push();
