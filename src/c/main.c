@@ -47,9 +47,11 @@ static void prv_init(void) {
 
   // Open AppMessage with sized buffers before comm_init so comm can report the
   // actual inbox capacity to JS (used as the stations-chunk size hint).
-  // 4096: fits the largest receive (a stations chunk + dict overhead).
+  // 2048: empirical ceiling on Emery — 4096 opens fine but chunks above ~2 KB
+  //       drop silently between phone and watch (likely BLE MTU). 2048 chunks
+  //       still cut the ~7.5 KB blob from 18 round trips down to 4–5.
   // 256:  fits the largest send (OP_GET_ARRIVALS with slug+routes, ~140 B).
-  const uint32_t inbox  = 4096;
+  const uint32_t inbox  = 2048;
   const uint32_t outbox = 256;
   app_message_register_inbox_received(prv_inbox_received);
   app_message_register_inbox_dropped(prv_inbox_dropped);
