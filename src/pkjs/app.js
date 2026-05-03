@@ -188,10 +188,16 @@ function handleRefreshStations() {
 
 Pebble.addEventListener('ready', function() {
   console.log('[pkjs] ready');
-  // Pre-warm the /stations cache so first watch request is fast
-  stationsModule.load(WORKER_BASE, function(err) {
-    if (err) console.warn('[pkjs] stations pre-warm failed: ' + err.message);
-    else console.log('[pkjs] stations cached');
+  // Pre-warm cache and proactively send version — watch's op=1 may arrive before
+  // the appmessage listener is registered and get silently dropped by the OS.
+  stationsModule.load(WORKER_BASE, function(err, data) {
+    if (err) {
+      console.warn('[pkjs] stations pre-warm failed: ' + err.message);
+      return;
+    }
+    var version = data.g | 0;
+    console.log('[pkjs] pre-warm OK, proactively sending STATIONS_VERSION=' + version);
+    sendDict({ DATA_TYPE: DATA_TYPE.STATIONS_VERSION, STATIONS_VERSION: version }, null);
   });
 });
 

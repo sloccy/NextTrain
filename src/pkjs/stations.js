@@ -13,8 +13,10 @@ function xhrGet(url, cb) {
   xhr.onload = function() {
     console.log('[stations] xhrGet status=' + xhr.status + ' len=' + xhr.responseText.length);
     if (xhr.status >= 200 && xhr.status < 300) {
-      try { cb(null, JSON.parse(xhr.responseText)); }
-      catch(e) {
+      try {
+        // '' + coerces STPyV8 JSObject → JS string before JSON.parse
+        cb(null, JSON.parse('' + xhr.responseText));
+      } catch(e) {
         console.error('[stations] JSON parse error: ' + e.message);
         cb(new Error('parse error'), null);
       }
@@ -31,8 +33,10 @@ function xhrGet(url, cb) {
 // ─── Load (with cache) ────────────────────────────────────────────────────────
 
 module.exports.load = function(workerBase, cb) {
-  var raw = localStorage.getItem(CACHE_KEY_DATA);
-  var ts  = parseInt(localStorage.getItem(CACHE_KEY_TS) || '0', 10);
+  var rawObj = localStorage.getItem(CACHE_KEY_DATA);
+  var raw    = rawObj != null ? '' + rawObj : null;
+  var tsObj  = localStorage.getItem(CACHE_KEY_TS);
+  var ts     = parseInt(tsObj != null ? '' + tsObj : '0', 10);
   var now = Math.floor(Date.now() / 1000);
   var age = now - ts;
 
