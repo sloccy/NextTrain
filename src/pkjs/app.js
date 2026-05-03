@@ -139,12 +139,21 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
       xhr.timeout = 8000;
 
       xhr.onload = function() {
+        console.log('[pkjs] arrivals xhr status=' + xhr.status + ' len=' + (xhr.responseText ? xhr.responseText.length : 0));
         if (xhr.status === 503) { sendStatus(queryIndex, STATUS.NO_DATA); drain(); return; }
-        if (xhr.status < 200 || xhr.status >= 300) { sendStatus(queryIndex, STATUS.ERROR); drain(); return; }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          console.error('[pkjs] arrivals HTTP error: ' + xhr.status);
+          sendStatus(queryIndex, STATUS.ERROR); drain(); return;
+        }
 
         var body;
-        try { body = JSON.parse(xhr.responseText); }
-        catch(e) { sendStatus(queryIndex, STATUS.ERROR); drain(); return; }
+        try {
+          // '' + coerces STPyV8 JSObject → JS string before JSON.parse (same fix as stations.js)
+          body = JSON.parse('' + xhr.responseText);
+        } catch(e) {
+          console.error('[pkjs] arrivals JSON parse error: ' + e.message);
+          sendStatus(queryIndex, STATUS.ERROR); drain(); return;
+        }
 
         var routes = (routesStr || '').split(',');
         var buf = arrivalsModule.pack(body.a || [], station, routes);
@@ -160,6 +169,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
 
       xhr.onerror   = function() { sendStatus(queryIndex, STATUS.OFFLINE); drain(); };
       xhr.ontimeout = function() { sendStatus(queryIndex, STATUS.OFFLINE); drain(); };
+      console.log('[pkjs] arrivals XHR GET ' + url);
       xhr.send();
     });
   });
