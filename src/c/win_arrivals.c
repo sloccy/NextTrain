@@ -9,6 +9,8 @@
 #define ROW_HEIGHT 56
 #define HEADER_HEIGHT 30
 #define ICON_SIZE 24
+#define REFRESH_MIN_SEC 30   // never poll faster than every 30 s
+#define REFRESH_MAX_SEC 300  // cap stale far-future next_refresh at 5 min
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -33,12 +35,10 @@ static void prv_timer_fired(void *ctx) {
 static void prv_schedule_refresh(uint32_t next_refresh_unix) {
   if (s_refresh_timer) { app_timer_cancel(s_refresh_timer); s_refresh_timer = NULL; }
   uint32_t now_sec = (uint32_t)(time(NULL));
-  if (next_refresh_unix <= now_sec) {
-    prv_do_refresh();
-    return;
-  }
-  uint32_t delay_ms = (next_refresh_unix - now_sec) * 1000;
-  s_refresh_timer = app_timer_register(delay_ms, prv_timer_fired, NULL);
+  uint32_t delay_sec = (next_refresh_unix > now_sec) ? (next_refresh_unix - now_sec) : 0;
+  if (delay_sec < REFRESH_MIN_SEC) delay_sec = REFRESH_MIN_SEC;
+  if (delay_sec > REFRESH_MAX_SEC) delay_sec = REFRESH_MAX_SEC;
+  s_refresh_timer = app_timer_register(delay_sec * 1000, prv_timer_fired, NULL);
 }
 
 static void prv_do_refresh(void) {
