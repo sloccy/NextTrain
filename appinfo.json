@@ -2,7 +2,7 @@
   "uuid": "a3f2e1d0-b4c5-4d6e-8f7a-9b0c1d2e3f4a",
   "shortName": "NextTrain",
   "longName": "Next Train RTD",
-  "companyName": "",
+  "companyName": "Brendan Slocum",
   "versionLabel": "1.0",
   "sdkVersion": "3",
   "targetPlatforms": ["emery"],
