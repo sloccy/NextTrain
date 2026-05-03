@@ -11,8 +11,10 @@
 static Window    *s_sta_window;
 static MenuLayer *s_sta_menu;
 static TextLayer *s_sta_loading;
+static bool       s_sta_error;
 
 static uint16_t prv_sta_num_rows(MenuLayer *ml, uint16_t s, void *ctx) {
+  if (s_sta_error) return 1;
   StationsCache *stations = state_get_stations();
   if (!stations || !stations->valid) return 1; // loading row
   return stations->station_count;
@@ -21,6 +23,13 @@ static uint16_t prv_sta_num_rows(MenuLayer *ml, uint16_t s, void *ctx) {
 static int16_t prv_sta_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) { return 44; }
 
 static void prv_sta_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void *c) {
+  if (s_sta_error) {
+    graphics_draw_text(ctx, "Offline \xe2\x80\x93 select to retry",
+                       fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                       layer_get_bounds(cell),
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    return;
+  }
   StationsCache *stations = state_get_stations();
   if (!stations || !stations->valid) {
     graphics_draw_text(ctx, "Loading stations\xe2\x80\xa6",
@@ -35,7 +44,23 @@ static void prv_sta_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, v
                        NULL, NULL);
 }
 
+static void prv_sta_status(uint8_t qi, CommStatus status) {
+  StationsCache *stations = state_get_stations();
+  if (stations && stations->valid) return; // already loaded, ignore
+  s_sta_error = true;
+  comm_set_status_callback(NULL);
+  if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
+}
+
 static void prv_sta_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
+  if (s_sta_error) {
+    s_sta_error = false;
+    comm_set_stations_ready_callback(prv_sta_stations_ready);
+    comm_set_status_callback(prv_sta_status);
+    comm_request_stations_version();
+    if (s_sta_menu) menu_layer_reload_data(s_sta_menu);
+    return;
+  }
   StationsCache *stations = state_get_stations();
   if (!stations || !stations->valid) return;
   if (idx->row >= stations->station_count) return;
@@ -64,12 +89,16 @@ static void prv_sta_window_load(Window *win) {
   layer_add_child(root, menu_layer_get_layer(s_sta_menu));
 
   comm_set_stations_ready_callback(prv_sta_stations_ready);
+  comm_set_status_callback(prv_sta_status);
 }
 
 static void prv_sta_window_unload(Window *win) {
   comm_set_stations_ready_callback(NULL);
+  comm_set_status_callback(NULL);
   menu_layer_destroy(s_sta_menu);
   s_sta_menu = NULL;
+  s_sta_error = false;
+  window_destroy(win);
   s_sta_window = NULL;
 }
 
@@ -233,6 +262,7 @@ static void prv_rte_window_unload(Window *win) {
   menu_layer_destroy(s_rte_menu);
   s_rte_menu = NULL;
   if (s_rte_ctx) { free(s_rte_ctx); s_rte_ctx = NULL; }
+  window_destroy(win);
   s_rte_window = NULL;
 }
 

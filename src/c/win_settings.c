@@ -19,9 +19,16 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   }
 }
 
+static void prv_status(uint8_t qi, CommStatus status) {
+  s_refreshing = false;
+  comm_set_status_callback(NULL);
+  if (s_menu) menu_layer_reload_data(s_menu);
+}
+
 static void prv_stations_ready(void) {
   s_refreshing = false;
   comm_set_stations_ready_callback(NULL);
+  comm_set_status_callback(NULL);
   if (s_menu) menu_layer_reload_data(s_menu);
 }
 
@@ -30,6 +37,7 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
     s_refreshing = true;
     menu_layer_reload_data(s_menu);
     comm_set_stations_ready_callback(prv_stations_ready);
+    comm_set_status_callback(prv_status);
     comm_request_refresh_stations();
   } else if (idx->row == 1) {
     win_edit_favorites_push();
@@ -55,9 +63,11 @@ static void prv_window_load(Window *win) {
 
 static void prv_window_unload(Window *win) {
   comm_set_stations_ready_callback(NULL);
+  comm_set_status_callback(NULL);
   menu_layer_destroy(s_menu);
   s_menu = NULL;
   s_refreshing = false;
+  window_destroy(win);
   s_window = NULL;
 }
 
