@@ -125,6 +125,6 @@ module.exports.pack = function(data) {
     });
   });
 
-  return new Uint8Array(bytes);
+  return bytes;
 };
 

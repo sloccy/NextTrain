@@ -86,14 +86,14 @@ function handleGetStationsFull() {
         console.error('[pkjs] stations pack returned null');
         sendStatus(0, STATUS.ERROR); drain(); return;
       }
-      var total  = Math.ceil(blob.byteLength / CHUNK_SIZE);
-      console.log('[pkjs] blob=' + blob.byteLength + 'B, chunks=' + total + ' x ' + CHUNK_SIZE + 'B');
+      var total  = Math.ceil(blob.length / CHUNK_SIZE);
+      console.log('[pkjs] blob=' + blob.length + 'B, chunks=' + total + ' x ' + CHUNK_SIZE + 'B');
       var index  = 0;
 
       function sendChunk() {
         if (index >= total) { console.log('[pkjs] all chunks sent'); drain(); return; }
         var start   = index * CHUNK_SIZE;
-        var end     = Math.min(start + CHUNK_SIZE, blob.byteLength);
+        var end     = Math.min(start + CHUNK_SIZE, blob.length);
         var slice   = blob.slice(start, end);
         var i       = index;
         index++;

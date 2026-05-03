@@ -46,6 +46,6 @@ module.exports = {
       util.lpStr(bytes, a.l  || '');
     });
 
-    return new Uint8Array(bytes);
+    return bytes;
   },
 };
