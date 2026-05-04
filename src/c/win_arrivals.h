@@ -6,7 +6,7 @@ typedef struct {
   char    station_slug[40];
   char    routes[64];       // "A:E,B:N"
   uint8_t query_index;      // favorite slot or QUERY_INDEX_TRANSIENT
-  bool    from_favorite;    // false → show "Add to Favorites"
+  bool    from_favorite;    // false → show "Add Favorite"
 } ArrivalsParams;
 
 void win_arrivals_push(const ArrivalsParams *params);

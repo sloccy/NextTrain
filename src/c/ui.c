@@ -196,14 +196,14 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
   GRect slot[4];
   GFont letter_font;
   if (n == 1) {
-    slot[0] = GRect(sx, sy - 1, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
+    slot[0] = GRect(sx, sy - 3, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
     letter_font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   } else {
     letter_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
-    slot[0] = GRect(sx + qoff,        sy + qoff - 1,   half - qoff, half + 1); // TL
-    slot[1] = GRect(sx + half,        sy + qoff - 1,   half - qoff, half + 1); // TR
-    slot[2] = GRect(sx + qoff,        sy + half - 1,   half - qoff, half + 1); // BL
-    slot[3] = GRect(sx + half,        sy + half - 1,   half - qoff, half + 1); // BR
+    slot[0] = GRect(sx + qoff,        sy + qoff - 3,   half - qoff, half + 1); // TL
+    slot[1] = GRect(sx + half,        sy + qoff - 3,   half - qoff, half + 1); // TR
+    slot[2] = GRect(sx + qoff,        sy + half - 3,   half - qoff, half + 1); // BL
+    slot[3] = GRect(sx + half,        sy + half - 3,   half - qoff, half + 1); // BR
   }
 
   if (n == 1) {
@@ -226,7 +226,7 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
     graphics_draw_text(ctx, t1, letter_font, slot[1],
                        GTextOverflowModeFill, GTextAlignmentCenter, NULL);
     // Bottom-center: horizontally centered between BL and BR
-    GRect bc = GRect(sx + half / 2, sy + half - 1, half, half + 1);
+    GRect bc = GRect(sx + half / 2, sy + half - 3, half, half + 1);
     graphics_draw_text(ctx, t2, letter_font, bc,
                        GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   } else { // n == 4

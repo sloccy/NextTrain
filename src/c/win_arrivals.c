@@ -134,7 +134,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   const ArrivalCache *cache = prv_cache();
   uint8_t arrivals = prv_arrival_count();
 
-  // Action row (always last): "Remove from Favorites" if already saved, else "Add"
+  // Action row (always last): "Remove Favorite" if already saved, else "Add Favorite"
   if (idx->row == prv_add_fav_row()) {
     const char *label = (s_existing_fav_idx >= 0)
                       ? "\xe2\x98\x85 Remove Favorite"
