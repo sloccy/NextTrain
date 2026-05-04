@@ -9,7 +9,9 @@
 
 // ─── Background prefetch ──────────────────────────────────────────────────────
 
-// Fire OP_GET_ARRIVALS for each saved favorite after stations version check.
+// Fire OP_GET_ARRIVALS for each saved favorite. Gated on JS being ready
+// (see prv_on_stations_ready) — sending earlier loses messages to the OS
+// because Pebble's JS event listener isn't yet registered, ACK without delivery.
 static void prv_prefetch_favorites(void) {
   uint8_t count = state_get_favorite_count();
   for (uint8_t i = 0; i < count; i++) {
@@ -18,10 +20,15 @@ static void prv_prefetch_favorites(void) {
 
     char routes[64] = {0};
     state_format_routes_query(fav, routes, sizeof(routes));
-    APP_LOG(APP_LOG_LEVEL_INFO, "[main] prefetch fav %u: slug='%s' rc=%u routes='%s'",
-            (unsigned)i, fav->station_slug, (unsigned)fav->route_count, routes);
     comm_request_arrivals(i, fav->station_slug, routes);
   }
+}
+
+static bool s_did_prefetch = false;
+static void prv_on_stations_ready(void) {
+  if (s_did_prefetch) return;
+  s_did_prefetch = true;
+  prv_prefetch_favorites();
 }
 
 // ─── AppMessage callbacks ─────────────────────────────────────────────────────
@@ -74,9 +81,11 @@ static void prv_init(void) {
   // Push home first — renders immediately from persist
   win_home_push();
 
-  // Background: check stations version + prefetch favorite arrivals
+  // Defer prefetch until JS confirms it's alive (via STATIONS_VERSION
+  // round-trip — JS auto-pushes it when ready). The watch's own op=1 may be
+  // sent before the JS event listener registers, in which case the OS drops it.
+  comm_set_stations_ready_callback(prv_on_stations_ready);
   comm_request_stations_version();
-  prv_prefetch_favorites();
 }
 
 static void prv_deinit(void) {

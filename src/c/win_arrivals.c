@@ -184,29 +184,32 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      time_r, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 
-  // Status label (small, colored) — light-gray backing when not highlighted so color pops
+  // Status label — colored text with 1px black outline (4 cardinal offsets)
+  // so the color reads cleanly on white without a heavy backing.
   bool is_delayed   = (e->status == ARRIVAL_LIVE);
   bool is_canceled  = (e->status == ARRIVAL_CANCELED || e->status == ARRIVAL_SKIPPED);
   GColor label_color = is_canceled ? GColorRed
                      : is_delayed  ? GColorGreen
                                    : GColorDarkGray;
   GRect label_r = GRect(text_x, 30, 90, 16);
-  if (!hi) {
-    graphics_context_set_fill_color(ctx, GColorLightGray);
-    graphics_fill_rect(ctx, label_r, 2, GCornersAll);
+  GFont label_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+  graphics_context_set_text_color(ctx, GColorBlack);
+  for (int8_t dx = -1; dx <= 1; dx++) {
+    for (int8_t dy = -1; dy <= 1; dy++) {
+      if ((dx == 0) == (dy == 0)) continue; // skip (0,0) and the diagonals
+      GRect off = GRect(label_r.origin.x + dx, label_r.origin.y + dy,
+                        label_r.size.w, label_r.size.h);
+      graphics_draw_text(ctx, e->label, label_font, off,
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    }
   }
   graphics_context_set_text_color(ctx, label_color);
-  graphics_draw_text(ctx, e->label,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     label_r, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  graphics_draw_text(ctx, e->label, label_font, label_r,
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-  // Headsign (right side) — same gray backing
+  // Headsign (right side)
   int16_t hs_x = text_x + 80;
   GRect hs_r   = GRect(hs_x, 12, bounds.size.w - hs_x - 4, 32);
-  if (!hi) {
-    graphics_context_set_fill_color(ctx, GColorLightGray);
-    graphics_fill_rect(ctx, hs_r, 2, GCornersAll);
-  }
   graphics_context_set_text_color(ctx, GColorDarkGray);
   graphics_draw_text(ctx, e->headsign,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
