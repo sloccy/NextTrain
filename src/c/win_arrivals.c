@@ -95,7 +95,7 @@ static const ArrivalCache *prv_cache(void) {
 }
 
 // Layout: 0..N-1 arrival rows (or 1 status row if N == 0), then optional
-// "Add to Favorites" at the end in search mode.
+// "Add Favorite" at the end in search mode.
 static uint8_t prv_arrival_count(void) {
   const ArrivalCache *c = prv_cache();
   return (c && c->valid) ? c->count : 0;
@@ -137,8 +137,8 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   // Action row (always last): "Remove from Favorites" if already saved, else "Add"
   if (idx->row == prv_add_fav_row()) {
     const char *label = (s_existing_fav_idx >= 0)
-                      ? "\xe2\x98\x85 Remove from Favorites"
-                      : "\xe2\x98\x85 Add to Favorites";
+                      ? "\xe2\x98\x85 Remove Favorite"
+                      : "\xe2\x98\x85 Add Favorite";
     menu_cell_basic_draw(ctx, cell, label, NULL, NULL);
     return;
   }
@@ -233,7 +233,7 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   if (idx->row != prv_add_fav_row()) return;
 
   if (s_existing_fav_idx >= 0) {
-    // "Remove from Favorites" — confirm before deleting
+    // "Remove Favorite" — confirm before deleting
     ActionMenuLevel *root = action_menu_level_create(1);
     action_menu_level_add_action(root, "Confirm Delete", prv_delete_action, NULL);
     ActionMenuConfig cfg = {
@@ -245,7 +245,7 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
     return;
   }
 
-  // "Add to Favorites" — parse routes then prompt to rename
+  // "Add Favorite" — parse routes then prompt to rename
   Favorite fav;
   memset(&fav, 0, sizeof(fav));
   strncpy(fav.station_slug, s_params.station_slug, sizeof(fav.station_slug) - 1);
