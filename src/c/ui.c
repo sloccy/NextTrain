@@ -4,26 +4,36 @@
 
 #define ICON_RADIUS 3
 
+// Black text with a 2 px white halo for legibility over any background hue.
+// Stamps the text 24 times offset within a 5×5 grid (excluding origin), then
+// the final black pass on top. Two 24-pt+ icons per screen → cheap enough.
+static void prv_draw_text_haloed(GContext *ctx, const char *text, GFont font,
+                                  GRect bounds) {
+  graphics_context_set_text_color(ctx, GColorWhite);
+  for (int8_t dx = -2; dx <= 2; dx++) {
+    for (int8_t dy = -2; dy <= 2; dy++) {
+      if (dx == 0 && dy == 0) continue;
+      GRect off = GRect(bounds.origin.x + dx, bounds.origin.y + dy,
+                        bounds.size.w, bounds.size.h);
+      graphics_draw_text(ctx, text, font, off,
+                         GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    }
+  }
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, text, font, bounds,
+                     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+}
+
 void ui_draw_route_icon(GContext *ctx, GRect bounds, char letter, GColor bg_color) {
-  // Thick colored border + white interior — color is decorative, the black
-  // letter on white center keeps the route legible regardless of hue.
   graphics_context_set_fill_color(ctx, bg_color);
   graphics_fill_rect(ctx, bounds, ICON_RADIUS, GCornersAll);
-  GRect inner = GRect(bounds.origin.x + 3, bounds.origin.y + 3,
-                      bounds.size.w - 6, bounds.size.h - 6);
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_rect(ctx, inner, ICON_RADIUS - 1, GCornersAll);
 
   char text[2] = {letter, 0};
   GRect text_bounds = GRect(bounds.origin.x, bounds.origin.y - 1,
                             bounds.size.w, bounds.size.h + 2);
-  graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_draw_text(ctx, text,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     text_bounds,
-                     GTextOverflowModeFill,
-                     GTextAlignmentCenter,
-                     NULL);
+  prv_draw_text_haloed(ctx, text,
+                       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       text_bounds);
 }
 
 int16_t ui_draw_route_icons(GContext *ctx, GRect bounds, const Favorite *fav,
@@ -126,18 +136,14 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
   GRect sq = GRect(sx, sy, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE);
 
   if (n == 1) {
-    // Thick colored border + white interior + large black letter
+    // Solid colored fill + large black letter with 2 px white halo
     graphics_context_set_fill_color(ctx, route_color[0]);
     graphics_fill_rect(ctx, sq, 3, GCornersAll);
-    GRect inner = GRect(sx + 3, sy + 3, FAV_SQUARE_SIZE - 6, FAV_SQUARE_SIZE - 6);
-    graphics_context_set_fill_color(ctx, GColorWhite);
-    graphics_fill_rect(ctx, inner, 2, GCornersAll);
 
-    graphics_context_set_text_color(ctx, GColorBlack);
     char text[2] = { fav->routes[0].route[0], 0 };
     GRect slot = GRect(sx, sy - 1, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
-    graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                       slot, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    prv_draw_text_haloed(ctx, text,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD), slot);
   } else {
     // Multi-route: white fill + 8-segment colored outline + black letters
     graphics_context_set_fill_color(ctx, GColorWhite);
