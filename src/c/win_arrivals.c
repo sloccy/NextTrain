@@ -124,6 +124,15 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
   graphics_context_set_text_color(ctx, GColorBlack);
 
+  // Subtle card outline on unhighlighted data rows
+  bool is_action_row = (idx->row == prv_add_fav_row());
+  if (!hi && !s_waiting && !is_action_row) {
+    GRect box = GRect(bounds.origin.x + 2, bounds.origin.y + 2,
+                      bounds.size.w - 4, bounds.size.h - 4);
+    graphics_context_set_stroke_color(ctx, GColorLightGray);
+    graphics_draw_round_rect(ctx, box, 4);
+  }
+
   if (s_waiting) {
     graphics_draw_text(ctx, "Loading\xe2\x80\xa6",
                        fonts_get_system_font(FONT_KEY_GOTHIC_18),
@@ -277,6 +286,7 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
     s_new_fav_idx      = state_get_favorite_count() - 1;
     s_existing_fav_idx = (int8_t)s_new_fav_idx;
     win_home_reload();
+    comm_request_arrivals(s_new_fav_idx, fav.station_slug, s_params.routes);
 
     ActionMenuLevel *root = action_menu_level_create(2);
     action_menu_level_add_action(root, "Rename", prv_post_add_action,

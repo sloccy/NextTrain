@@ -27,6 +27,18 @@ static void prv_fav_renamed(void) {
   if (s_menu) menu_layer_reload_data(s_menu);
 }
 
+static void prv_arrivals_landed(uint8_t qi, const ArrivalCache *cache) {
+  if (s_menu) menu_layer_reload_data(s_menu);
+}
+
+static void prv_window_appear(Window *w) {
+  comm_set_arrivals_callback(prv_arrivals_landed);
+}
+
+static void prv_window_disappear(Window *w) {
+  comm_set_arrivals_callback(NULL);
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 static void prv_launch_favorite(uint8_t index) {
@@ -64,13 +76,7 @@ static int16_t prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) {
 }
 
 static int16_t prv_header_height(MenuLayer *ml, uint16_t section, void *ctx) {
-  return (section == SECTION_FAVORITES) ? 0 : MENU_CELL_BASIC_HEADER_HEIGHT;
-}
-
-static void prv_draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *c) {
-  if (section == SECTION_ACTIONS) {
-    menu_cell_basic_header_draw(ctx, cell, "");
-  }
+  return 0;
 }
 
 static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void *c) {
@@ -114,39 +120,34 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
       slug_to_display(fav->station_slug, display_name, sizeof(display_name));
     }
 
-    // Position text relative to the icon's vertical center. Pebble system fonts
-    // render with extra leading at the top of their bounding box, so we apply
-    // a small upward visual nudge to make the text look centered on the icon.
+    // Position text: always two-line stack (name + subtitle) centered on icon.
+    // Pebble fonts have extra top-leading so we nudge up to visually center.
     ArrivalCache *cache = state_get_arrival_cache(idx->row);
-    bool has_sub = (cache && cache->valid && cache->count > 0);
 
-    const int16_t NAME_BOX_H = 22;
-    const int16_t SUB_BOX_H  = 16;
+    const int16_t NAME_BOX_H  = 22;
+    const int16_t SUB_BOX_H   = 16;
     const int16_t VISUAL_NUDGE = 4;
-    int16_t icon_cy = bounds.size.h / 2;
-    int16_t text_w  = bounds.size.w - x - 4;
-
-    int16_t name_top;
-    if (has_sub) {
-      int16_t stack_h = NAME_BOX_H + SUB_BOX_H;
-      name_top = icon_cy - stack_h / 2 - VISUAL_NUDGE;
-    } else {
-      name_top = icon_cy - NAME_BOX_H / 2 - VISUAL_NUDGE;
-    }
+    int16_t icon_cy  = bounds.size.h / 2;
+    int16_t text_w   = bounds.size.w - x - 4;
+    int16_t stack_h  = NAME_BOX_H + SUB_BOX_H;
+    int16_t name_top = icon_cy - stack_h / 2 - VISUAL_NUDGE;
 
     GRect name_bounds = GRect(x, name_top, text_w, NAME_BOX_H);
     graphics_draw_text(ctx, display_name,
                        fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                        name_bounds, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-    if (has_sub) {
-      char sub[32];
-      snprintf(sub, sizeof(sub), "Next: %s (%s)", cache->entries[0].time, cache->entries[0].route);
-      GRect sub_bounds = GRect(x, name_top + NAME_BOX_H, text_w, SUB_BOX_H);
-      graphics_context_set_text_color(ctx, GColorDarkGray);
-      graphics_draw_text(ctx, sub, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                         sub_bounds, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    char sub[32];
+    if (cache && cache->valid && cache->count > 0) {
+      snprintf(sub, sizeof(sub), "Next: %s (%s)",
+               cache->entries[0].time, cache->entries[0].route);
+    } else {
+      strncpy(sub, "Loading\xe2\x80\xa6", sizeof(sub));
     }
+    GRect sub_bounds = GRect(x, name_top + NAME_BOX_H, text_w, SUB_BOX_H);
+    graphics_context_set_text_color(ctx, GColorDarkGray);
+    graphics_draw_text(ctx, sub, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                       sub_bounds, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     return;
   }
 
@@ -179,7 +180,6 @@ static void prv_window_load(Window *win) {
     .get_num_rows      = prv_num_rows,
     .get_cell_height   = prv_row_height,
     .get_header_height = prv_header_height,
-    .draw_header       = prv_draw_header,
     .draw_row          = prv_draw_row,
     .select_click      = prv_select,
   });
@@ -202,8 +202,10 @@ void win_home_push(void) {
   if (!s_window) {
     s_window = window_create();
     window_set_window_handlers(s_window, (WindowHandlers){
-      .load   = prv_window_load,
-      .unload = prv_window_unload,
+      .load      = prv_window_load,
+      .unload    = prv_window_unload,
+      .appear    = prv_window_appear,
+      .disappear = prv_window_disappear,
     });
     window_set_background_color(s_window, GColorWhite);
   }
