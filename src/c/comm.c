@@ -79,6 +79,8 @@ static bool prv_enqueue(uint8_t op, uint8_t index, const char *station, const ch
       s_queue[i].index = index;
       if (station) strncpy(s_queue[i].station, station, sizeof(s_queue[i].station) - 1);
       if (routes)  strncpy(s_queue[i].routes,  routes,  sizeof(s_queue[i].routes)  - 1);
+      APP_LOG(APP_LOG_LEVEL_INFO, "[comm] enqueue slot=%d op=%d idx=%d routes='%s'",
+              i, (int)op, (int)index, routes ? routes : "");
       if (!s_sending) prv_send_next();
       return true;
     }

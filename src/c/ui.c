@@ -127,7 +127,7 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
     graphics_fill_rect(ctx, sq, 3, GCornersAll);
     graphics_context_set_text_color(ctx, GColorWhite);
     char text[2] = { fav->routes[0].route[0], 0 };
-    GRect slot = GRect(sx, sy - 4, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
+    GRect slot = GRect(sx, sy - 1, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
     graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
                        slot, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   } else {

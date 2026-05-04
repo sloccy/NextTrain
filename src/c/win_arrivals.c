@@ -184,21 +184,29 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      time_r, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 
-  // Status label (small, colored)
+  // Status label (small, colored) — light-gray backing when not highlighted so color pops
   bool is_delayed   = (e->status == ARRIVAL_LIVE);
   bool is_canceled  = (e->status == ARRIVAL_CANCELED || e->status == ARRIVAL_SKIPPED);
   GColor label_color = is_canceled ? GColorRed
                      : is_delayed  ? GColorGreen
                                    : GColorDarkGray;
-  graphics_context_set_text_color(ctx, label_color);
   GRect label_r = GRect(text_x, 30, 90, 16);
+  if (!hi) {
+    graphics_context_set_fill_color(ctx, GColorLightGray);
+    graphics_fill_rect(ctx, label_r, 2, GCornersAll);
+  }
+  graphics_context_set_text_color(ctx, label_color);
   graphics_draw_text(ctx, e->label,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      label_r, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-  // Headsign (right side)
+  // Headsign (right side) — same gray backing
   int16_t hs_x = text_x + 80;
   GRect hs_r   = GRect(hs_x, 12, bounds.size.w - hs_x - 4, 32);
+  if (!hi) {
+    graphics_context_set_fill_color(ctx, GColorLightGray);
+    graphics_fill_rect(ctx, hs_r, 2, GCornersAll);
+  }
   graphics_context_set_text_color(ctx, GColorDarkGray);
   graphics_draw_text(ctx, e->headsign,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),

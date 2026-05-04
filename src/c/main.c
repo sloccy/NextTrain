@@ -18,6 +18,8 @@ static void prv_prefetch_favorites(void) {
 
     char routes[64] = {0};
     state_format_routes_query(fav, routes, sizeof(routes));
+    APP_LOG(APP_LOG_LEVEL_INFO, "[main] prefetch fav %u: slug='%s' rc=%u routes='%s'",
+            (unsigned)i, fav->station_slug, (unsigned)fav->route_count, routes);
     comm_request_arrivals(i, fav->station_slug, routes);
   }
 }
