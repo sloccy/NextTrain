@@ -184,25 +184,23 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      time_r, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 
-  // Status label — colored text with 1px black outline (4 cardinal offsets)
-  // so the color reads cleanly on white without a heavy backing.
+  // Status label — colored variants get bold + darker hues so they pop on white;
+  // grayscale (Scheduled / unknown) stays plain.
   bool is_delayed   = (e->status == ARRIVAL_LIVE);
   bool is_canceled  = (e->status == ARRIVAL_CANCELED || e->status == ARRIVAL_SKIPPED);
-  GColor label_color = is_canceled ? GColorRed
-                     : is_delayed  ? GColorGreen
-                                   : GColorDarkGray;
-  GRect label_r = GRect(text_x, 30, 90, 16);
-  GFont label_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-  graphics_context_set_text_color(ctx, GColorBlack);
-  for (int8_t dx = -1; dx <= 1; dx++) {
-    for (int8_t dy = -1; dy <= 1; dy++) {
-      if ((dx == 0) == (dy == 0)) continue; // skip (0,0) and the diagonals
-      GRect off = GRect(label_r.origin.x + dx, label_r.origin.y + dy,
-                        label_r.size.w, label_r.size.h);
-      graphics_draw_text(ctx, e->label, label_font, off,
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    }
+  GColor label_color;
+  GFont  label_font;
+  if (is_canceled) {
+    label_color = GColorDarkCandyAppleRed;
+    label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+  } else if (is_delayed) {
+    label_color = GColorDarkGreen;
+    label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+  } else {
+    label_color = GColorDarkGray;
+    label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14);
   }
+  GRect label_r = GRect(text_x, 30, 90, 16);
   graphics_context_set_text_color(ctx, label_color);
   graphics_draw_text(ctx, e->label, label_font, label_r,
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
