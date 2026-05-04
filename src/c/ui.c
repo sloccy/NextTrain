@@ -10,9 +10,9 @@
 static void prv_draw_text_haloed(GContext *ctx, const char *text, GFont font,
                                   GRect bounds) {
   graphics_context_set_text_color(ctx, GColorWhite);
-  for (int8_t dx = -2; dx <= 2; dx++) {
-    for (int8_t dy = -2; dy <= 2; dy++) {
-      if (dx == 0 && dy == 0) continue;
+  for (int8_t dx = -1; dx <= 2; dx++) {
+    for (int8_t dy = -1; dy <= 1; dy++) {
+      if ((dx == 0 || dx == 1) && dy == 0) continue;
       GRect off = GRect(bounds.origin.x + dx, bounds.origin.y + dy,
                         bounds.size.w, bounds.size.h);
       graphics_draw_text(ctx, text, font, off,
@@ -21,6 +21,10 @@ static void prv_draw_text_haloed(GContext *ctx, const char *text, GFont font,
   }
   graphics_context_set_text_color(ctx, GColorBlack);
   graphics_draw_text(ctx, text, font, bounds,
+                     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  GRect bold = GRect(bounds.origin.x + 1, bounds.origin.y,
+                     bounds.size.w, bounds.size.h);
+  graphics_draw_text(ctx, text, font, bold,
                      GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 

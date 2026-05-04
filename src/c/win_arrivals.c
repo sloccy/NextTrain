@@ -167,15 +167,23 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   GRect icon_r  = GRect(8, (bounds.size.h - ICON_SIZE) / 2, ICON_SIZE, ICON_SIZE);
   ui_draw_route_icon(ctx, icon_r, e->route[0], color);
 
-  // Time (large)
+  // Time + label two-line stack centered on icon midline
   int16_t text_x = 8 + ICON_SIZE + 8;
-  GRect time_r   = GRect(text_x, 8, 70, 22);
+  const int16_t TIME_BOX_H  = 22;
+  const int16_t LABEL_BOX_H = 16;
+  const int16_t HS_BOX_H    = 16;
+  int16_t icon_cy   = bounds.size.h / 2;
+  int16_t stack_h   = TIME_BOX_H + LABEL_BOX_H;
+  int16_t time_top  = icon_cy - stack_h / 2;
+  int16_t label_top = time_top + TIME_BOX_H;
+
+  GRect time_r = GRect(text_x, time_top, 70, TIME_BOX_H);
   graphics_context_set_text_color(ctx, GColorBlack);
   graphics_draw_text(ctx, e->time,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      time_r, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 
-  // Status label — colored variants get bold + darker hues so they pop on white;
+  // Status label — colored variants get bold + hues so they pop on white;
   // grayscale (Scheduled / unknown) stays plain.
   bool is_delayed   = (e->status == ARRIVAL_LIVE);
   bool is_canceled  = (e->status == ARRIVAL_CANCELED || e->status == ARRIVAL_SKIPPED);
@@ -191,14 +199,14 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
     label_color = GColorDarkGray;
     label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14);
   }
-  GRect label_r = GRect(text_x, 30, 90, 16);
+  GRect label_r = GRect(text_x, label_top, 90, LABEL_BOX_H);
   graphics_context_set_text_color(ctx, label_color);
   graphics_draw_text(ctx, e->label, label_font, label_r,
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-  // Headsign (right side)
+  // Headsign centered on same icon midline
   int16_t hs_x = text_x + 80;
-  GRect hs_r   = GRect(hs_x, 12, bounds.size.w - hs_x - 4, 32);
+  GRect hs_r   = GRect(hs_x, icon_cy - HS_BOX_H / 2, bounds.size.w - hs_x - 4, HS_BOX_H);
   graphics_context_set_text_color(ctx, GColorDarkGray);
   graphics_draw_text(ctx, e->headsign,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
