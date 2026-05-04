@@ -5,21 +5,25 @@
 #define ICON_RADIUS 3
 
 void ui_draw_route_icon(GContext *ctx, GRect bounds, char letter, GColor bg_color) {
+  // Thick colored border + white interior — color is decorative, the black
+  // letter on white center keeps the route legible regardless of hue.
   graphics_context_set_fill_color(ctx, bg_color);
   graphics_fill_rect(ctx, bounds, ICON_RADIUS, GCornersAll);
+  GRect inner = GRect(bounds.origin.x + 3, bounds.origin.y + 3,
+                      bounds.size.w - 6, bounds.size.h - 6);
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, inner, ICON_RADIUS - 1, GCornersAll);
 
   char text[2] = {letter, 0};
-  // Nudge text up 1px — system font baselines render slightly low visually
   GRect text_bounds = GRect(bounds.origin.x, bounds.origin.y - 1,
                             bounds.size.w, bounds.size.h + 2);
-  graphics_context_set_text_color(ctx, GColorWhite);
+  graphics_context_set_text_color(ctx, GColorBlack);
   graphics_draw_text(ctx, text,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      text_bounds,
                      GTextOverflowModeFill,
                      GTextAlignmentCenter,
                      NULL);
-  graphics_context_set_text_color(ctx, GColorBlack);
 }
 
 int16_t ui_draw_route_icons(GContext *ctx, GRect bounds, const Favorite *fav,
@@ -122,10 +126,14 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
   GRect sq = GRect(sx, sy, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE);
 
   if (n == 1) {
-    // Solid filled square with white letter — matches arrivals page route icon style
+    // Thick colored border + white interior + large black letter
     graphics_context_set_fill_color(ctx, route_color[0]);
     graphics_fill_rect(ctx, sq, 3, GCornersAll);
-    graphics_context_set_text_color(ctx, GColorWhite);
+    GRect inner = GRect(sx + 3, sy + 3, FAV_SQUARE_SIZE - 6, FAV_SQUARE_SIZE - 6);
+    graphics_context_set_fill_color(ctx, GColorWhite);
+    graphics_fill_rect(ctx, inner, 2, GCornersAll);
+
+    graphics_context_set_text_color(ctx, GColorBlack);
     char text[2] = { fav->routes[0].route[0], 0 };
     GRect slot = GRect(sx, sy - 1, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
     graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),

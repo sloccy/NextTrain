@@ -124,15 +124,6 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
   graphics_context_set_text_color(ctx, GColorBlack);
 
-  // Subtle card outline on unhighlighted data rows
-  bool is_action_row = (idx->row == prv_add_fav_row());
-  if (!hi && !s_waiting && !is_action_row) {
-    GRect box = GRect(bounds.origin.x + 2, bounds.origin.y + 2,
-                      bounds.size.w - 4, bounds.size.h - 4);
-    graphics_context_set_stroke_color(ctx, GColorLightGray);
-    graphics_draw_round_rect(ctx, box, 4);
-  }
-
   if (s_waiting) {
     graphics_draw_text(ctx, "Loading\xe2\x80\xa6",
                        fonts_get_system_font(FONT_KEY_GOTHIC_18),
@@ -191,10 +182,10 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   GColor label_color;
   GFont  label_font;
   if (is_canceled) {
-    label_color = GColorDarkCandyAppleRed;
+    label_color = GColorRed;
     label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
   } else if (is_delayed) {
-    label_color = GColorDarkGreen;
+    label_color = GColorIslamicGreen;
     label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
   } else {
     label_color = GColorDarkGray;
