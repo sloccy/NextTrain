@@ -244,17 +244,24 @@ static void prv_rte_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, v
   GRect icon = GRect(8, (bounds.size.h - 24) / 2, 24, 24);
   ui_draw_route_icon(ctx, icon, rt->route[0], color);
 
-  // Headsign + direction
+  // Headsign + direction stack centered on icon midline
   graphics_context_set_text_color(ctx, GColorBlack);
   char label[36];
   snprintf(label, sizeof(label), "%s", rt->headsign);
-  GRect text = GRect(40, (bounds.size.h - 18) / 2, bounds.size.w - 72, 20);
+
+  const int16_t TEXT_BOX_H = 20;
+  const int16_t DIR_BOX_H  = 14;
+  int16_t icon_cy  = bounds.size.h / 2;
+  int16_t stack_h  = TEXT_BOX_H + DIR_BOX_H;
+  int16_t text_top = icon_cy - stack_h / 2;
+
+  GRect text = GRect(40, text_top, bounds.size.w - 72, TEXT_BOX_H);
   graphics_draw_text(ctx, label, fonts_get_system_font(FONT_KEY_GOTHIC_18),
                      text, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
   char dir_label[4];
   snprintf(dir_label, sizeof(dir_label), "(%c)", rt->dir);
-  GRect dir_rect = GRect(text.origin.x, text.origin.y + 18, text.size.w, 14);
+  GRect dir_rect = GRect(text.origin.x, text_top + TEXT_BOX_H, text.size.w, DIR_BOX_H);
   graphics_context_set_text_color(ctx, GColorDarkGray);
   graphics_draw_text(ctx, dir_label, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      dir_rect, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
