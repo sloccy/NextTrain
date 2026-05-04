@@ -35,7 +35,7 @@ static int16_t  prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) { retur
 
 static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void *c) {
   if (idx->row == 0) {
-    const char *label = s_refreshing ? "Refreshing\xe2\x80\xa6" : "Refresh Station Data";
+    const char *label = s_refreshing ? "Refreshing\xe2\x80\xa6" : "Refresh Data";
     menu_cell_basic_draw(ctx, cell, label, NULL, NULL);
   } else {
     menu_cell_basic_draw(ctx, cell, "Edit Favorites", NULL, NULL);

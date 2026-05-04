@@ -65,7 +65,7 @@ static void prv_sta_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, v
   }
   StationsCache *stations = state_get_stations();
   if (!stations || !stations->valid || !stations->is_full) {
-    graphics_draw_text(ctx, "Loading stations\xe2\x80\xa6",
+    graphics_draw_text(ctx, "Loading\xe2\x80\xa6",
                        fonts_get_system_font(FONT_KEY_GOTHIC_18),
                        layer_get_bounds(cell),
                        GTextOverflowModeFill, GTextAlignmentCenter, NULL);

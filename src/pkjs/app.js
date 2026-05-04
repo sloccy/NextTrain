@@ -136,9 +136,9 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
         sendStatus(queryIndex, STATUS.NO_DATA); drain(); return;
       }
 
-      var url = WORKER_BASE + '/arrivals'
-              + '?station=' + encodeURIComponent(stationSlug)
-              + '&routes='  + encodeURIComponent(routesStr || '');
+      var url = WORKER_BASE + '/a'
+              + '?s=' + encodeURIComponent(stationSlug)
+              + '&r=' + encodeURIComponent(routesStr || '');
 
       var xhr = new XMLHttpRequest();
       xhr.open('GET', url, true);

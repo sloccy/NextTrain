@@ -385,6 +385,18 @@ void state_format_routes_query(const Favorite *fav, char *buf, size_t buf_size) 
   }
 }
 
+int8_t state_find_favorite_by_slug_and_routes(const char *slug, const char *routes_query) {
+  uint8_t count = state_get_favorite_count();
+  for (uint8_t i = 0; i < count; i++) {
+    Favorite *fav = state_get_favorite(i);
+    if (!fav || strcmp(fav->station_slug, slug) != 0) continue;
+    char buf[64];
+    state_format_routes_query(fav, buf, sizeof(buf));
+    if (strcmp(buf, routes_query) == 0) return (int8_t)i;
+  }
+  return -1;
+}
+
 void slug_to_display(const char *slug, char *out, size_t n) {
   if (n == 0) return;
   size_t o = 0;

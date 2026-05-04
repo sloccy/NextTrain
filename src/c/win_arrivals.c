@@ -1,5 +1,6 @@
 #include "win_arrivals.h"
 #include "win_home.h"
+#include "win_rename.h"
 #include "state.h"
 #include "comm.h"
 #include "ui.h"
@@ -17,11 +18,14 @@
 static Window      *s_window;
 static Layer       *s_header_layer;
 static MenuLayer   *s_menu;
+static ActionMenu  *s_action_menu;
 static AppTimer    *s_refresh_timer;
 static ArrivalsParams s_params;
 static bool         s_waiting;       // true if no data yet for initial load
 static bool         s_have_status;   // true if last update was a status, not arrivals
 static CommStatus   s_last_status;
+static int8_t       s_existing_fav_idx; // index of matching favorite, or -1
+static uint8_t      s_new_fav_idx;      // index of just-added favorite
 
 // ─── Auto-refresh timer ───────────────────────────────────────────────────────
 
@@ -103,10 +107,10 @@ static uint16_t prv_add_fav_row(void) {
 }
 
 static uint16_t prv_num_rows(MenuLayer *ml, uint16_t s, void *ctx) {
-  if (s_waiting) return 1; // "Loading…"
+  if (s_waiting) return 1;
   uint16_t base = prv_arrival_count();
-  if (base == 0) base = 1; // status / "no upcoming trains" row
-  return s_params.from_favorite ? base : base + 1;
+  if (base == 0) base = 1;
+  return base + 1; // always show Add/Remove row at bottom
 }
 
 static int16_t prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) {
@@ -130,9 +134,12 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   const ArrivalCache *cache = prv_cache();
   uint8_t arrivals = prv_arrival_count();
 
-  // "Add to Favorites" row (last row in search mode)
-  if (!s_params.from_favorite && idx->row == prv_add_fav_row()) {
-    menu_cell_basic_draw(ctx, cell, "\xe2\x98\x85 Add to Favorites", NULL, NULL);
+  // Action row (always last): "Remove from Favorites" if already saved, else "Add"
+  if (idx->row == prv_add_fav_row()) {
+    const char *label = (s_existing_fav_idx >= 0)
+                      ? "\xe2\x98\x85 Remove from Favorites"
+                      : "\xe2\x98\x85 Add to Favorites";
+    menu_cell_basic_draw(ctx, cell, label, NULL, NULL);
     return;
   }
 
@@ -198,42 +205,90 @@ static void prv_dismiss_to_home(void *ctx) {
   window_stack_pop(true);   // station picker → home
 }
 
+static void prv_rename_done(void) {
+  win_home_reload();
+  app_timer_register(0, prv_dismiss_to_home, NULL);
+}
+
+enum { ACTION_RENAME = 1, ACTION_KEEP_DEFAULT, ACTION_CONFIRM_DELETE };
+
+static void prv_post_add_action(ActionMenu *am, const ActionMenuItem *item, void *ctx) {
+  uint32_t action = (uint32_t)(uintptr_t)action_menu_item_get_action_data(item);
+  if (action == ACTION_RENAME) {
+    win_rename_start(s_new_fav_idx, prv_rename_done);
+  } else {
+    win_home_reload();
+    app_timer_register(0, prv_dismiss_to_home, NULL);
+  }
+}
+
+static void prv_delete_action(ActionMenu *am, const ActionMenuItem *item, void *ctx) {
+  state_remove_favorite((uint8_t)s_existing_fav_idx);
+  s_existing_fav_idx = -1;
+  win_home_reload();
+  app_timer_register(0, prv_dismiss_to_home, NULL);
+}
+
 static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
-  if (!s_params.from_favorite && idx->row == prv_add_fav_row()) {
-    // "Add to Favorites"
-    Favorite fav;
-    memset(&fav, 0, sizeof(fav));
-    strncpy(fav.station_slug, s_params.station_slug, sizeof(fav.station_slug) - 1);
+  if (idx->row != prv_add_fav_row()) return;
 
-    // Parse routes string "A:E,B:N" back into Favorite.routes.
-    // Hand-rolled walker — no strtok, no buffer copy.
-    const char *p = s_params.routes;
-    while (*p && fav.route_count < MAX_FAV_ROUTES) {
-      const char *seg_end = p;
-      while (*seg_end && *seg_end != ',') seg_end++;
+  if (s_existing_fav_idx >= 0) {
+    // "Remove from Favorites" — confirm before deleting
+    ActionMenuLevel *root = action_menu_level_create(1);
+    action_menu_level_add_action(root, "Confirm Delete", prv_delete_action, NULL);
+    ActionMenuConfig cfg = {
+      .root_level = root,
+      .colors     = { .background = GColorWhite, .foreground = GColorBlack },
+      .align      = ActionMenuAlignTop,
+    };
+    s_action_menu = action_menu_open(&cfg);
+    return;
+  }
 
-      const char *colon = p;
-      while (colon < seg_end && *colon != ':') colon++;
+  // "Add to Favorites" — parse routes then prompt to rename
+  Favorite fav;
+  memset(&fav, 0, sizeof(fav));
+  strncpy(fav.station_slug, s_params.station_slug, sizeof(fav.station_slug) - 1);
 
-      // Need ':' with at least one char before and after.
-      if (colon > p && colon + 1 < seg_end) {
-        size_t name_len = (size_t)(colon - p);
-        if (name_len > sizeof(fav.routes[0].route) - 1)
-          name_len = sizeof(fav.routes[0].route) - 1;
-        memcpy(fav.routes[fav.route_count].route, p, name_len);
-        fav.routes[fav.route_count].route[name_len] = '\0';
-        fav.routes[fav.route_count].dir = *(colon + 1);
-        fav.route_count++;
-      }
+  const char *p = s_params.routes;
+  while (*p && fav.route_count < MAX_FAV_ROUTES) {
+    const char *seg_end = p;
+    while (*seg_end && *seg_end != ',') seg_end++;
 
-      p = seg_end;
-      if (*p == ',') p++;
+    const char *colon = p;
+    while (colon < seg_end && *colon != ':') colon++;
+
+    if (colon > p && colon + 1 < seg_end) {
+      size_t name_len = (size_t)(colon - p);
+      if (name_len > sizeof(fav.routes[0].route) - 1)
+        name_len = sizeof(fav.routes[0].route) - 1;
+      memcpy(fav.routes[fav.route_count].route, p, name_len);
+      fav.routes[fav.route_count].route[name_len] = '\0';
+      fav.routes[fav.route_count].dir = *(colon + 1);
+      fav.route_count++;
     }
-    if (fav.route_count > 0) {
-      state_add_favorite(&fav);
-      win_home_reload();
-      app_timer_register(0, prv_dismiss_to_home, NULL);
-    }
+
+    p = seg_end;
+    if (*p == ',') p++;
+  }
+
+  if (fav.route_count > 0) {
+    state_add_favorite(&fav);
+    s_new_fav_idx      = state_get_favorite_count() - 1;
+    s_existing_fav_idx = (int8_t)s_new_fav_idx;
+    win_home_reload();
+
+    ActionMenuLevel *root = action_menu_level_create(2);
+    action_menu_level_add_action(root, "Rename", prv_post_add_action,
+                                 (void *)(uintptr_t)ACTION_RENAME);
+    action_menu_level_add_action(root, "Use default name", prv_post_add_action,
+                                 (void *)(uintptr_t)ACTION_KEEP_DEFAULT);
+    ActionMenuConfig cfg = {
+      .root_level = root,
+      .colors     = { .background = GColorWhite, .foreground = GColorBlack },
+      .align      = ActionMenuAlignTop,
+    };
+    s_action_menu = action_menu_open(&cfg);
   }
 }
 
@@ -289,9 +344,11 @@ static void prv_window_unload(Window *win) {
 // ─── Public ───────────────────────────────────────────────────────────────────
 
 void win_arrivals_push(const ArrivalsParams *params) {
-  s_params      = *params;
-  s_waiting     = true;
-  s_have_status = false;
+  s_params           = *params;
+  s_waiting          = true;
+  s_have_status      = false;
+  s_existing_fav_idx = state_find_favorite_by_slug_and_routes(
+                         params->station_slug, params->routes);
 
   s_window = window_create();
   window_set_background_color(s_window, GColorWhite);

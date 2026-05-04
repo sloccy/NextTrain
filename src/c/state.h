@@ -118,6 +118,9 @@ const Station *state_find_station(const char *slug);
 // Encode Favorite routes as a comma-separated "route:dir" query string (e.g. "A:N,B:E")
 void state_format_routes_query(const Favorite *fav, char *buf, size_t buf_size);
 
+// Returns the index of the first favorite matching slug + routes_query, or -1 if none.
+int8_t state_find_favorite_by_slug_and_routes(const char *slug, const char *routes_query);
+
 // Convert slug "union_station" → "Union Station". Underscores become spaces;
 // first char of each word uppercased. Mechanical — no punctuation reconstruction.
 void slug_to_display(const char *slug, char *out, size_t n);

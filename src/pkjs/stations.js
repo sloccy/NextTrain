@@ -63,7 +63,7 @@ module.exports.load = function(workerBase, cb) {
     console.log('[stations] no cache, fetching from network');
   }
 
-  var url = workerBase + '/stations';
+  var url = workerBase + '/s';
   console.log('[stations] XHR GET ' + url);
   xhrGet(url, function(err, data) {
     if (err) {

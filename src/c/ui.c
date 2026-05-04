@@ -199,7 +199,7 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
     slot[0] = GRect(sx, sy - 1, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
     letter_font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   } else {
-    letter_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+    letter_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
     slot[0] = GRect(sx + qoff,        sy + qoff - 1,   half - qoff, half + 1); // TL
     slot[1] = GRect(sx + half,        sy + qoff - 1,   half - qoff, half + 1); // TR
     slot[2] = GRect(sx + qoff,        sy + half - 1,   half - qoff, half + 1); // BL
@@ -237,8 +237,8 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
     }
   }
 
-  // Cardinal arrows: one per unique direction, outside the square
-  // N=above, S=below, E=right, W=left. Small triangle, 5px base, 4px height.
+  // Cardinal arrows: one per unique direction, outside the square.
+  // Filled red with 1px black outline using GPath.
   bool dirs[4] = { false, false, false, false }; // N, S, E, W
   for (uint8_t i = 0; i < n; i++) {
     switch (fav->routes[i].dir) {
@@ -251,41 +251,56 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
 
   int16_t cx = sx + mid; // center x of square
   int16_t cy = sy + mid; // center y of square
-  graphics_context_set_stroke_color(ctx, GColorBlack);
+  int16_t by = sy + FAV_SQUARE_SIZE;
+  int16_t rx = sx + FAV_SQUARE_SIZE;
 
-  if (dirs[0]) { // N: triangle pointing up, above top edge
-    GPoint apex  = GPoint(cx,     sy - 2);
-    GPoint base1 = GPoint(cx - 3, sy + 1);
-    GPoint base2 = GPoint(cx + 3, sy + 1);
-    graphics_draw_line(ctx, apex, base1);
-    graphics_draw_line(ctx, apex, base2);
-    graphics_draw_line(ctx, base1, base2);
+  if (dirs[0]) { // N: pointing up
+    GPoint pts[3] = { GPoint(cx, sy - 4), GPoint(cx - 3, sy + 1), GPoint(cx + 3, sy + 1) };
+    GPathInfo info = { .num_points = 3, .points = pts };
+    GPath *p = gpath_create(&info);
+    if (p) {
+      graphics_context_set_fill_color(ctx, GColorRed);
+      gpath_draw_filled(ctx, p);
+      graphics_context_set_stroke_color(ctx, GColorBlack);
+      gpath_draw_outline(ctx, p);
+      gpath_destroy(p);
+    }
   }
-  if (dirs[1]) { // S: triangle pointing down, below bottom edge
-    int16_t by = sy + FAV_SQUARE_SIZE;
-    GPoint apex  = GPoint(cx,     by + 1);
-    GPoint base1 = GPoint(cx - 3, by - 2);
-    GPoint base2 = GPoint(cx + 3, by - 2);
-    graphics_draw_line(ctx, apex, base1);
-    graphics_draw_line(ctx, apex, base2);
-    graphics_draw_line(ctx, base1, base2);
+  if (dirs[1]) { // S: pointing down
+    GPoint pts[3] = { GPoint(cx, by + 4), GPoint(cx - 3, by - 1), GPoint(cx + 3, by - 1) };
+    GPathInfo info = { .num_points = 3, .points = pts };
+    GPath *p = gpath_create(&info);
+    if (p) {
+      graphics_context_set_fill_color(ctx, GColorRed);
+      gpath_draw_filled(ctx, p);
+      graphics_context_set_stroke_color(ctx, GColorBlack);
+      gpath_draw_outline(ctx, p);
+      gpath_destroy(p);
+    }
   }
-  if (dirs[2]) { // E: triangle pointing right
-    int16_t rx = sx + FAV_SQUARE_SIZE;
-    GPoint apex  = GPoint(rx + 1, cy    );
-    GPoint base1 = GPoint(rx - 2, cy - 3);
-    GPoint base2 = GPoint(rx - 2, cy + 3);
-    graphics_draw_line(ctx, apex, base1);
-    graphics_draw_line(ctx, apex, base2);
-    graphics_draw_line(ctx, base1, base2);
+  if (dirs[2]) { // E: pointing right
+    GPoint pts[3] = { GPoint(rx + 4, cy), GPoint(rx - 1, cy - 3), GPoint(rx - 1, cy + 3) };
+    GPathInfo info = { .num_points = 3, .points = pts };
+    GPath *p = gpath_create(&info);
+    if (p) {
+      graphics_context_set_fill_color(ctx, GColorRed);
+      gpath_draw_filled(ctx, p);
+      graphics_context_set_stroke_color(ctx, GColorBlack);
+      gpath_draw_outline(ctx, p);
+      gpath_destroy(p);
+    }
   }
-  if (dirs[3]) { // W: triangle pointing left
-    GPoint apex  = GPoint(sx - 2, cy    );
-    GPoint base1 = GPoint(sx + 1, cy - 3);
-    GPoint base2 = GPoint(sx + 1, cy + 3);
-    graphics_draw_line(ctx, apex, base1);
-    graphics_draw_line(ctx, apex, base2);
-    graphics_draw_line(ctx, base1, base2);
+  if (dirs[3]) { // W: pointing left
+    GPoint pts[3] = { GPoint(sx - 4, cy), GPoint(sx + 1, cy - 3), GPoint(sx + 1, cy + 3) };
+    GPathInfo info = { .num_points = 3, .points = pts };
+    GPath *p = gpath_create(&info);
+    if (p) {
+      graphics_context_set_fill_color(ctx, GColorRed);
+      gpath_draw_filled(ctx, p);
+      graphics_context_set_stroke_color(ctx, GColorBlack);
+      gpath_draw_outline(ctx, p);
+      gpath_destroy(p);
+    }
   }
 
   // Restore context state
