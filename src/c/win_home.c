@@ -104,7 +104,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
     int16_t x = ui_draw_favorite_icon(ctx, icon_origin, fav, stations);
     graphics_context_set_text_color(ctx, GColorBlack);
 
-    // Draw station name to the right of the icon
+    // Resolve display name
     x += TEXT_MARGIN_LEFT;
     char display_name[40];
     if (fav->name[0]) {
@@ -113,17 +113,36 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
     } else {
       slug_to_display(fav->station_slug, display_name, sizeof(display_name));
     }
-    GRect name_bounds = GRect(x, (bounds.size.h - 18) / 2, bounds.size.w - x - 4, 22);
+
+    // Position text relative to the icon's vertical center. Pebble system fonts
+    // render with extra leading at the top of their bounding box, so we apply
+    // a small upward visual nudge to make the text look centered on the icon.
+    ArrivalCache *cache = state_get_arrival_cache(idx->row);
+    bool has_sub = (cache && cache->valid && cache->count > 0);
+
+    const int16_t NAME_BOX_H = 22;
+    const int16_t SUB_BOX_H  = 16;
+    const int16_t VISUAL_NUDGE = 4;
+    int16_t icon_cy = bounds.size.h / 2;
+    int16_t text_w  = bounds.size.w - x - 4;
+
+    int16_t name_top;
+    if (has_sub) {
+      int16_t stack_h = NAME_BOX_H + SUB_BOX_H;
+      name_top = icon_cy - stack_h / 2 - VISUAL_NUDGE;
+    } else {
+      name_top = icon_cy - NAME_BOX_H / 2 - VISUAL_NUDGE;
+    }
+
+    GRect name_bounds = GRect(x, name_top, text_w, NAME_BOX_H);
     graphics_draw_text(ctx, display_name,
                        fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                        name_bounds, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-    // If arrivals cache ready, show first departure time as subtitle
-    ArrivalCache *cache = state_get_arrival_cache(idx->row);
-    if (cache && cache->valid && cache->count > 0) {
+    if (has_sub) {
       char sub[32];
       snprintf(sub, sizeof(sub), "Next: %s (%s)", cache->entries[0].time, cache->entries[0].route);
-      GRect sub_bounds = GRect(x, bounds.size.h - 16, bounds.size.w - x - 4, 16);
+      GRect sub_bounds = GRect(x, name_top + NAME_BOX_H, text_w, SUB_BOX_H);
       graphics_context_set_text_color(ctx, GColorDarkGray);
       graphics_draw_text(ctx, sub, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                          sub_bounds, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
