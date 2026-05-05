@@ -282,9 +282,13 @@ static void prv_rte_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   bool any = false;
   for (uint8_t i = 0; i < st->route_count && i < MAX_ROUTES_PER_STATION; i++) {
     if (!s_selected[i]) continue;
-    char part[8];
-    snprintf(part, sizeof(part), "%s:%c", st->routes[i].route, st->routes[i].dir);
-    if (any) strncat(routes, ",", sizeof(routes) - strlen(routes) - 1);
+    char dir_num = '0';
+    if (st->routes[i].dir == 'S') dir_num = '1';
+    else if (st->routes[i].dir == 'E') dir_num = '2';
+    else if (st->routes[i].dir == 'W') dir_num = '3';
+
+    char part[3];
+    snprintf(part, sizeof(part), "%c%c", st->routes[i].route[0], dir_num);
     strncat(routes, part, sizeof(routes) - strlen(routes) - 1);
     any = true;
   }

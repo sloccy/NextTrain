@@ -266,25 +266,19 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   strncpy(fav.station_slug, s_params.station_slug, sizeof(fav.station_slug) - 1);
 
   const char *p = s_params.routes;
-  while (*p && fav.route_count < MAX_FAV_ROUTES) {
-    const char *seg_end = p;
-    while (*seg_end && *seg_end != ',') seg_end++;
+  while (*p && *(p + 1) && fav.route_count < MAX_FAV_ROUTES) {
+    fav.routes[fav.route_count].route[0] = *p;
+    fav.routes[fav.route_count].route[1] = '\0';
 
-    const char *colon = p;
-    while (colon < seg_end && *colon != ':') colon++;
+    char dir_num = *(p + 1);
+    char dir = 'N';
+    if (dir_num == '1')      dir = 'S';
+    else if (dir_num == '2') dir = 'E';
+    else if (dir_num == '3') dir = 'W';
 
-    if (colon > p && colon + 1 < seg_end) {
-      size_t name_len = (size_t)(colon - p);
-      if (name_len > sizeof(fav.routes[0].route) - 1)
-        name_len = sizeof(fav.routes[0].route) - 1;
-      memcpy(fav.routes[fav.route_count].route, p, name_len);
-      fav.routes[fav.route_count].route[name_len] = '\0';
-      fav.routes[fav.route_count].dir = *(colon + 1);
-      fav.route_count++;
-    }
-
-    p = seg_end;
-    if (*p == ',') p++;
+    fav.routes[fav.route_count].dir = dir;
+    fav.route_count++;
+    p += 2;
   }
 
   if (fav.route_count > 0) {

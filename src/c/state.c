@@ -378,9 +378,13 @@ void state_format_routes_query(const Favorite *fav, char *buf, size_t buf_size) 
   if (!fav || buf_size == 0) return;
   buf[0] = '\0';
   for (uint8_t i = 0; i < fav->route_count; i++) {
-    char part[8];
-    snprintf(part, sizeof(part), "%s:%c", fav->routes[i].route, fav->routes[i].dir);
-    if (i > 0) strncat(buf, ",", buf_size - strlen(buf) - 1);
+    char dir_num = '0';
+    if (fav->routes[i].dir == 'S') dir_num = '1';
+    else if (fav->routes[i].dir == 'E') dir_num = '2';
+    else if (fav->routes[i].dir == 'W') dir_num = '3';
+
+    char part[3];
+    snprintf(part, sizeof(part), "%c%c", fav->routes[i].route[0], dir_num);
     strncat(buf, part, buf_size - strlen(buf) - 1);
   }
 }

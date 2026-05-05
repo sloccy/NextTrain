@@ -2,7 +2,7 @@
 
 var stationsModule = require('./stations');
 
-var WORKER_BASE = 'https://nexttrainworker.sloccy.workers.dev';
+var WORKER_BASE = 'https://nt.sloccy.workers.dev';
 
 var OP = { GET_STATIONS_VERSION: 1, GET_STATIONS_FULL: 2,
            GET_ARRIVALS: 3, REFRESH_STATIONS: 4 };
@@ -194,7 +194,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
               for (var k = 0; k < hlen; k++) headsign += String.fromCharCode(b[p++]);
               
               if (slug === stationSlug) {
-                lookup[rName + ':' + dir] = { r: r, g: g, b: b_, h: headsign };
+                lookup[rName + '.' + dir] = { r: r, g: g, b: b_, h: headsign };
               }
             }
           }
@@ -217,7 +217,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
           else if (status > 0) label = "Delayed " + status + " min";
           else if (status < 0) label = "Early " + Math.abs(status) + " min";
 
-          var static_ = lookup[route + ':' + dir] || { r: 128, g: 128, b: 128, h: '' };
+          var static_ = lookup[route + '.' + dir] || { r: 128, g: 128, b: 128, h: '' };
           
           // Re-pack into watch format: [r,g,b][route lpStr][hs lpStr][time lpStr][label lpStr]
           finalBuf.push(static_.r, static_.g, static_.b);
