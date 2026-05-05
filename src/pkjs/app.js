@@ -167,13 +167,12 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
         var nextRefresh = parseInt(xhr.getResponseHeader('X-Next-Refresh') || '0', 10);
         var resBin = new Uint8Array(xhr.response);
         
-        // Decode lean binary: [count] × ([route lpStr][dir u8][time_mins u16][label lpStr])
+        // Decode lean binary: [count] × ([route lpStr][dir u8][time_mins u16][status_s8])
         var pos = 0;
         var count = resBin[pos++];
         var finalBuf = [count];
 
-        // Prepare station/route lookup table from cached stations.bin
-        // stationsData.bytes is [u32 gen][u16 count][...stations]
+        // Prepare lookup table from cached stations.bin
         var lookup = {};
         (function() {
           var b = stationsData.bytes;
@@ -205,11 +204,16 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
           var rlen = resBin[pos++];
           var route = '';
           for (var j = 0; j < rlen; j++) route += String.fromCharCode(resBin[pos++]);
-          var dir = String.fromCharCode(resBin[pos++]);
+          var dirCode = resBin[pos++];
+          var dir = String.fromCharCode(dirCode);
           var mins = (resBin[pos++] << 8) | resBin[pos++];
-          var llen = resBin[pos++];
-          var label = '';
-          for (var j = 0; j < llen; j++) label += String.fromCharCode(resBin[pos++]);
+          var status = new Int8Array([resBin[pos++]])[0];
+
+          var label = "";
+          if (status === -128) label = "Canceled";
+          else if (status === -127) label = "Skipped";
+          else if (status > 0) label = "Delayed " + status + " min";
+          else if (status < 0) label = "Early " + Math.abs(status) + " min";
 
           var static_ = lookup[route + ':' + dir] || { r: 128, g: 128, b: 128, h: '' };
           

@@ -6,17 +6,34 @@ var TTL_SECONDS    = 7 * 24 * 3600;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
 function arrayToBase64(arr) {
-  var binary = '';
-  for (var i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
-  return btoa(binary);
+  var res = '', i, len = arr.length;
+  for (i = 0; i < len; i += 3) {
+    var a = arr[i], b = arr[i+1], c = arr[i+2];
+    res += B64[a >> 2];
+    res += B64[((a & 3) << 4) | (b >> 4 || 0)];
+    res += (i + 1 < len) ? B64[((b & 15) << 2) | (c >> 6 || 0)] : '=';
+    res += (i + 2 < len) ? B64[c & 63] : '=';
+  }
+  return res;
 }
 
-function base64ToArray(base64) {
-  var binary = atob(base64);
-  var arr = [];
-  for (var i = 0; i < binary.length; i++) arr.push(binary.charCodeAt(i));
-  return arr;
+function base64ToArray(s) {
+  var map = {}; for (var j = 0; j < 64; j++) map[B64[j]] = j;
+  var bytes = [];
+  for (var i = 0; i < s.length; i += 4) {
+    var a = map[s[i]], b = map[s[i+1]], c = map[s[i+2]], d = map[s[i+3]];
+    bytes.push((a << 2) | (b >> 4));
+    if (s[i+2] !== '=') {
+      bytes.push(((b & 15) << 4) | (c >> 2));
+      if (s[i+3] !== '=') {
+        bytes.push(((c & 3) << 6) | d);
+      }
+    }
+  }
+  return bytes;
 }
 
 // ─── Load (with cache) ────────────────────────────────────────────────────────
