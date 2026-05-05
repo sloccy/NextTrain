@@ -212,6 +212,8 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
           var label = "";
           if (status === -128) label = "Canceled";
           else if (status === -127) label = "Skipped";
+          else if (status === -126) label = "On time";
+          else if (status === 0) label = "Scheduled";
           else if (status > 0) label = "Delayed " + status + " min";
           else if (status < 0) label = "Early " + Math.abs(status) + " min";
 
