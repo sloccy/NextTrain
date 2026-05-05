@@ -140,40 +140,116 @@ function handleGetStationsFull(inboxSize) {
 function handleGetArrivals(queryIndex, stationSlug, routesStr) {
   console.log('[pkjs] handleGetArrivals qi=' + queryIndex + ' sta=' + stationSlug + ' routes=' + routesStr);
   enqueue(function() {
-    var url = WORKER_BASE + '/a'
-            + '?s=' + encodeURIComponent(stationSlug)
-            + '&r=' + encodeURIComponent(routesStr || '');
-
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
-    xhr.responseType = 'arraybuffer';
-    xhr.timeout = 8000;
-
-    xhr.onload = function() {
-      console.log('[pkjs] arrivals xhr status=' + xhr.status);
-      if (xhr.status === 404 || xhr.status === 503) {
-        sendStatus(queryIndex, STATUS.NO_DATA); drain(); return;
-      }
-      if (xhr.status < 200 || xhr.status >= 300) {
-        sendStatus(queryIndex, STATUS.ERROR); drain(); return;
+    loadOrFetchStations(function(err, stationsData) {
+      if (err || !stationsData) {
+        console.error('[pkjs] arrivals: stations data unavailable');
+        sendStatus(queryIndex, STATUS.OFFLINE); drain(); return;
       }
 
-      var nextRefresh = parseInt(xhr.getResponseHeader('X-Next-Refresh') || '0', 10);
-      var buf = Array.prototype.slice.call(new Uint8Array(xhr.response));
+      var url = WORKER_BASE + '/a'
+              + '?s=' + encodeURIComponent(stationSlug)
+              + '&r=' + encodeURIComponent(routesStr || '');
 
-      sendDict({
-        DATA_TYPE:    DATA_TYPE.ARRIVALS,
-        QUERY_INDEX:  queryIndex,
-        NEXT_REFRESH: nextRefresh,
-        PAYLOAD:      buf,
-      }, drain);
-    };
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.responseType = 'arraybuffer';
+      xhr.timeout = 8000;
 
-    xhr.onerror   = function() { sendStatus(queryIndex, STATUS.OFFLINE); drain(); };
-    xhr.ontimeout = function() { sendStatus(queryIndex, STATUS.OFFLINE); drain(); };
-    console.log('[pkjs] arrivals XHR GET ' + url);
-    xhr.send();
+      xhr.onload = function() {
+        console.log('[pkjs] arrivals xhr status=' + xhr.status);
+        if (xhr.status === 404 || xhr.status === 503) {
+          sendStatus(queryIndex, STATUS.NO_DATA); drain(); return;
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          sendStatus(queryIndex, STATUS.ERROR); drain(); return;
+        }
+
+        var nextRefresh = parseInt(xhr.getResponseHeader('X-Next-Refresh') || '0', 10);
+        var resBin = new Uint8Array(xhr.response);
+        
+        // Decode lean binary: [count] × ([route lpStr][dir u8][time_mins u16][label lpStr])
+        var pos = 0;
+        var count = resBin[pos++];
+        var finalBuf = [count];
+
+        // Prepare station/route lookup table from cached stations.bin
+        // stationsData.bytes is [u32 gen][u16 count][...stations]
+        var lookup = {};
+        (function() {
+          var b = stationsData.bytes;
+          var p = 6;
+          var sCount = (b[4] << 8) | b[5];
+          for (var i = 0; i < sCount; i++) {
+            var slen = b[p++];
+            var slug = '';
+            for (var j = 0; j < slen; j++) slug += String.fromCharCode(b[p++]);
+            var rCount = b[p++];
+            for (var j = 0; j < rCount; j++) {
+              var r = b[p], g = b[p+1], b_ = b[p+2]; p += 3;
+              var rlen = b[p++];
+              var rName = '';
+              for (var k = 0; k < rlen; k++) rName += String.fromCharCode(b[p++]);
+              var dir = String.fromCharCode(b[p++]);
+              var hlen = b[p++];
+              var headsign = '';
+              for (var k = 0; k < hlen; k++) headsign += String.fromCharCode(b[p++]);
+              
+              if (slug === stationSlug) {
+                lookup[rName + ':' + dir] = { r: r, g: g, b: b_, h: headsign };
+              }
+            }
+          }
+        })();
+
+        for (var i = 0; i < count; i++) {
+          var rlen = resBin[pos++];
+          var route = '';
+          for (var j = 0; j < rlen; j++) route += String.fromCharCode(resBin[pos++]);
+          var dir = String.fromCharCode(resBin[pos++]);
+          var mins = (resBin[pos++] << 8) | resBin[pos++];
+          var llen = resBin[pos++];
+          var label = '';
+          for (var j = 0; j < llen; j++) label += String.fromCharCode(resBin[pos++]);
+
+          var static_ = lookup[route + ':' + dir] || { r: 128, g: 128, b: 128, h: '' };
+          
+          // Re-pack into watch format: [r,g,b][route lpStr][hs lpStr][time lpStr][label lpStr]
+          finalBuf.push(static_.r, static_.g, static_.b);
+          lpStrWatch(finalBuf, route, 8);
+          lpStrWatch(finalBuf, static_.h, 24);
+          lpStrWatch(finalBuf, formatTime(mins), 12);
+          lpStrWatch(finalBuf, label, 32);
+        }
+
+        sendDict({
+          DATA_TYPE:    DATA_TYPE.ARRIVALS,
+          QUERY_INDEX:  queryIndex,
+          NEXT_REFRESH: nextRefresh,
+          PAYLOAD:      finalBuf,
+        }, drain);
+      };
+
+      xhr.onerror   = function() { sendStatus(queryIndex, STATUS.OFFLINE); drain(); };
+      xhr.ontimeout = function() { sendStatus(queryIndex, STATUS.OFFLINE); drain(); };
+      console.log('[pkjs] arrivals XHR GET ' + url);
+      xhr.send();
+    });
   });
+}
+
+function lpStrWatch(bytes, s, maxLen) {
+  var str = (s || '').slice(0, maxLen);
+  bytes.push(str.length);
+  for (var i = 0; i < str.length; i++) bytes.push(str.charCodeAt(i) & 0xFF);
+}
+
+function formatTime(mins) {
+  var h = Math.floor(mins / 60);
+  var m = mins % 60;
+  var p = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return h + ':' + (m < 10 ? '0' : '') + m + ' ' + p;
 }
 
 // ─── Refresh stations ─────────────────────────────────────────────────────────
