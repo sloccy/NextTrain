@@ -20,9 +20,6 @@ int16_t ui_draw_route_icons(GContext *ctx, GRect bounds, const Favorite *fav,
 int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin, const Favorite *fav,
                               const StationsCache *stations);
 
-// Map ArrivalStatus to a short display string.
-const char *ui_status_label(ArrivalStatus status);
-
 // Convert raw r,g,b bytes to the nearest Pebble GColor.
 GColor ui_gcolor_from_rgb(uint8_t r, uint8_t g, uint8_t b);
 

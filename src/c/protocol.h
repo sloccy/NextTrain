@@ -31,14 +31,5 @@ typedef enum {
   STATUS_ERROR    = 3,
 } CommStatus;
 
-// Arrival status codes inside the arrivals payload
-typedef enum {
-  ARRIVAL_LIVE      = 0,
-  ARRIVAL_SCHEDULED = 1,
-  ARRIVAL_CANCELED  = 2,
-  ARRIVAL_SKIPPED   = 3,
-  ARRIVAL_ADDED     = 4,
-} ArrivalStatus;
-
 // MSG_QUERY_INDEX sentinel for transient (search) queries
 #define QUERY_INDEX_TRANSIENT 0xFF

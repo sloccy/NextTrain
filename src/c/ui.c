@@ -299,17 +299,6 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
   return origin.x + FAV_BBOX_SIZE;
 }
 
-const char *ui_status_label(ArrivalStatus status) {
-  switch (status) {
-    case ARRIVAL_LIVE:      return "Live";
-    case ARRIVAL_SCHEDULED: return "Sched";
-    case ARRIVAL_CANCELED:  return "Cancel";
-    case ARRIVAL_SKIPPED:   return "Skip";
-    case ARRIVAL_ADDED:     return "Added";
-    default:                return "";
-  }
-}
-
 GColor ui_gcolor_from_rgb(uint8_t r, uint8_t g, uint8_t b) {
   return GColorFromRGB(r, g, b);
 }

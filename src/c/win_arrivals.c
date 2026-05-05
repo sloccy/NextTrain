@@ -183,10 +183,8 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      time_r, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 
-  // Status label — colored variants get bold + hues so they pop on white;
-  // grayscale (Scheduled / unknown) stays plain.
-  bool is_delayed   = (e->status == ARRIVAL_LIVE);
-  bool is_canceled  = (e->status == ARRIVAL_CANCELED || e->status == ARRIVAL_SKIPPED);
+  bool is_canceled = (strcmp(e->label, "Canceled") == 0 || strcmp(e->label, "Skipped") == 0);
+  bool is_delayed  = (!is_canceled && e->label[0] != '\0');
   GColor label_color;
   GFont  label_font;
   if (is_canceled) {

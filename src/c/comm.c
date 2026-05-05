@@ -422,11 +422,10 @@ static void prv_parse_arrivals_payload(ArrivalCache *cache,
   for (uint8_t i = 0; i < count; i++) {
     ArrivalEntry *e = &cache->entries[i];
 
-    if (p + 4 > end) return;
-    e->r      = *p++;
-    e->g      = *p++;
-    e->b      = *p++;
-    e->status = (ArrivalStatus)*p++;
+    if (p + 3 > end) return;
+    e->r = *p++;
+    e->g = *p++;
+    e->b = *p++;
 
     // lpStr: [u8 len][bytes] — return on truncated data, leaving previously
     // parsed entries intact (cache->count reflects fully-parsed entries only).

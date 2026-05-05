@@ -41,7 +41,6 @@ typedef struct {
 
 typedef struct {
   uint8_t       r, g, b;
-  ArrivalStatus status;
   char          route[4];
   char          headsign[25];
   char          time[10];
