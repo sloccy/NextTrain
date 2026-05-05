@@ -1,128 +1,55 @@
 'use strict';
 
-var util = require('./util');
-
-var CACHE_KEY_DATA = 'nt_stations';
+var CACHE_KEY_DATA = 'nt_stations_bin';
 var CACHE_KEY_TS   = 'nt_stations_fetched_at';
 var TTL_SECONDS    = 7 * 24 * 3600;
 
-function xhrGet(url, cb) {
-  var xhr = new XMLHttpRequest();
-  xhr.open('GET', url, true);
-  xhr.timeout = util.XHR_TIMEOUT_MS;
-  xhr.onload = function() {
-    console.log('[stations] xhrGet status=' + xhr.status + ' len=' + xhr.responseText.length);
-    if (xhr.status >= 200 && xhr.status < 300) {
-      var parsed;
-      try {
-        // '' + coerces STPyV8 JSObject → JS string before JSON.parse
-        parsed = JSON.parse('' + xhr.responseText);
-      } catch(e) {
-        console.error('[stations] JSON parse error: ' + e.message);
-        cb(new Error('parse error'), null);
-        return;
-      }
-      cb(null, parsed);
-    } else {
-      console.error('[stations] HTTP error: ' + xhr.status);
-      cb(new Error('HTTP ' + xhr.status), null);
-    }
-  };
-  xhr.onerror   = function() { console.error('[stations] network error'); cb(new Error('network'), null); };
-  xhr.ontimeout = function() { console.error('[stations] timeout after ' + util.XHR_TIMEOUT_MS + 'ms'); cb(new Error('timeout'), null); };
-  xhr.send();
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function arrayToBase64(arr) {
+  var binary = '';
+  for (var i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
+  return btoa(binary);
+}
+
+function base64ToArray(base64) {
+  var binary = atob(base64);
+  var arr = [];
+  for (var i = 0; i < binary.length; i++) arr.push(binary.charCodeAt(i));
+  return arr;
 }
 
 // ─── Load (with cache) ────────────────────────────────────────────────────────
 
 module.exports.load = function(workerBase, cb) {
-  var rawObj = localStorage.getItem(CACHE_KEY_DATA);
-  var raw    = rawObj != null ? '' + rawObj : null;
-  var tsObj  = localStorage.getItem(CACHE_KEY_TS);
-  var ts     = parseInt(tsObj != null ? '' + tsObj : '0', 10);
+  var b64 = localStorage.getItem(CACHE_KEY_DATA);
+  var tsObj = localStorage.getItem(CACHE_KEY_TS);
+  var ts = parseInt(tsObj != null ? '' + tsObj : '0', 10);
   var now = Math.floor(Date.now() / 1000);
   var age = now - ts;
 
-  if (raw) {
-    if (age < TTL_SECONDS) {
-      console.log('[stations] cache hit, age=' + age + 's, len=' + raw.length);
-      var parsed = null;
-      try {
-        parsed = JSON.parse(raw);
-      } catch(e) {
-        console.warn('[stations] cache parse error: ' + e.message + ', falling through to fetch');
-      }
-      if (parsed) {
-        console.log('[stations] cache parsed OK, station_count=' + ((parsed.s || []).length));
-        return cb(null, parsed);
-      }
-    } else {
-      console.log('[stations] cache expired, age=' + age + 's (ttl=' + TTL_SECONDS + 's)');
+  if (b64 && age < TTL_SECONDS) {
+    console.log('[stations] cache hit, age=' + age + 's');
+    var bytes = base64ToArray(b64);
+    if (bytes.length >= 4) {
+      var g = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+      return cb(null, { g: g, bytes: bytes });
     }
-  } else {
-    console.log('[stations] no cache, fetching from network');
   }
 
-  var url = workerBase + '/s';
-  console.log('[stations] XHR GET ' + url);
-  xhrGet(url, function(err, data) {
-    if (err) {
-      console.error('[stations] XHR failed: ' + err.message);
-      cb(err, null);
-      return;
-    }
-    var count = (data && data.s) ? data.s.length : 0;
-    console.log('[stations] XHR OK, station_count=' + count + ' generated_at=' + (data && data.g));
-    localStorage.setItem(CACHE_KEY_DATA, JSON.stringify(data));
-    localStorage.setItem(CACHE_KEY_TS, String(Math.floor(Date.now() / 1000)));
-    cb(null, data);
-  });
+  // If no cache or expired, we return error. app.js will handle the fetch.
+  // This is a change from previous version where load() did the XHR.
+  // However, the plan says app.js handles the fetch now.
+  cb(new Error('no cache'), null);
+};
+
+module.exports.store = function(bytes) {
+  console.log('[stations] storing ' + bytes.length + ' bytes');
+  localStorage.setItem(CACHE_KEY_DATA, arrayToBase64(bytes));
+  localStorage.setItem(CACHE_KEY_TS, String(Math.floor(Date.now() / 1000)));
 };
 
 module.exports.invalidate = function() {
   localStorage.removeItem(CACHE_KEY_DATA);
   localStorage.removeItem(CACHE_KEY_TS);
 };
-
-// ─── Pack /stations JSON into a flat binary blob for watch transfer ────────────
-//
-// Wire format:
-//   [u32 generated_at]
-//   [u16 station_count]
-//   for each station:
-//     [u8 slug_len][bytes slug]
-//     [u8 route_count]
-//     for each route:
-//       [u8 r][u8 g][u8 b]
-//       [u8 route_len][bytes route]
-//       [u8 dir]                      ASCII char
-//       [u8 hs_len][bytes headsign]   truncated to 24 bytes
-
-module.exports.pack = function(data) {
-  if (!data || !data.s) return null;
-
-  var bytes = [];
-
-  // generated_at: big-endian uint32
-  var g = data.g | 0;
-  bytes.push((g >>> 24) & 0xFF, (g >>> 16) & 0xFF, (g >>> 8) & 0xFF, g & 0xFF);
-
-  var stations = data.s;
-  bytes.push((stations.length >>> 8) & 0xFF, stations.length & 0xFF); // uint16
-
-  stations.forEach(function(st) {
-    util.lpStr(bytes, st.k, 39);  // slug
-    var routes = st.r || [];
-    bytes.push(routes.length & 0xFF);
-    routes.forEach(function(rm) {
-      var color = util.hexColor(rm.c);
-      bytes.push((color >>> 16) & 0xFF, (color >>> 8) & 0xFF, color & 0xFF);
-      util.lpStr(bytes, rm.r, 3);            // route letter
-      bytes.push(rm.d.charCodeAt(0) & 0xFF); // dir
-      util.lpStr(bytes, rm.h, 24);           // headsign
-    });
-  });
-
-  return bytes;
-};
-
