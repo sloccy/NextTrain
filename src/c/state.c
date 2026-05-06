@@ -237,10 +237,12 @@ static bool prv_parse_blob(const uint8_t *data, uint32_t size) {
   state_free_stations();
 
   NEED(6);
-  s_stations.generated_at  = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16)
-                            | ((uint32_t)p[2] << 8)  | p[3];
+  s_stations.generated_at  = (uint32_t)p[0]
+                            | ((uint32_t)p[1] << 8)
+                            | ((uint32_t)p[2] << 16)
+                            | ((uint32_t)p[3] << 24);
   p += 4;
-  s_stations.station_count = ((uint16_t)p[0] << 8) | p[1];
+  s_stations.station_count = (uint16_t)p[0] | ((uint16_t)p[1] << 8);
   p += 2;
 
   if (s_stations.station_count == 0) { s_stations.valid = true; return true; }

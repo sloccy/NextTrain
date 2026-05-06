@@ -63,7 +63,7 @@ function fetchStations(cb) {
     if (xhr.status >= 200 && xhr.status < 300) {
       var bytes = Array.prototype.slice.call(new Uint8Array(xhr.response));
       stationsModule.store(bytes);
-      var g = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+      var g = (bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)) >>> 0;
       cb(null, { g: g, bytes: bytes });
     } else {
       cb(new Error('HTTP ' + xhr.status), null);
@@ -177,7 +177,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
         (function() {
           var b = stationsData.bytes;
           var p = 6;
-          var sCount = (b[4] << 8) | b[5];
+          var sCount = b[4] | (b[5] << 8);
           for (var i = 0; i < sCount; i++) {
             var slen = b[p++];
             var slug = '';

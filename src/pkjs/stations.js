@@ -49,7 +49,7 @@ module.exports.load = function(workerBase, cb) {
     console.log('[stations] cache hit, age=' + age + 's');
     var bytes = base64ToArray(b64);
     if (bytes.length >= 4) {
-      var g = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+      var g = (bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)) >>> 0;
       return cb(null, { g: g, bytes: bytes });
     }
   }
