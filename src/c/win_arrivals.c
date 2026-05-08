@@ -184,11 +184,12 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
                      time_r, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 
   bool is_canceled  = (strcmp(e->label, "Canceled") == 0 || strcmp(e->label, "Skipped") == 0);
+  bool is_late      = (strncmp(e->label, "Late ", 5) == 0);
   bool is_scheduled = (strcmp(e->label, "Scheduled") == 0);
-  bool is_live      = (!is_canceled && !is_scheduled && e->label[0] != '\0');
+  bool is_live      = (!is_canceled && !is_late && !is_scheduled && e->label[0] != '\0');
   GColor label_color;
   GFont  label_font;
-  if (is_canceled) {
+  if (is_canceled || is_late) {
     label_color = GColorRed;
     label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
   } else if (is_live) {
