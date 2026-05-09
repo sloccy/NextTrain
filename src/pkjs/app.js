@@ -2,7 +2,7 @@
 
 var stationsModule = require('./stations');
 
-var WORKER_BASE = 'https://nt.sloccy.workers.dev';
+var WORKER_BASE = 'https://nt.sloccy.com';
 
 var OP = { GET_STATIONS_VERSION: 1, GET_STATIONS_FULL: 2,
            GET_ARRIVALS: 3, REFRESH_STATIONS: 4 };
