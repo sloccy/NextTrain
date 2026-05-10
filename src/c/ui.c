@@ -82,7 +82,7 @@ int16_t ui_draw_route_icons(GContext *ctx, GRect bounds, const Favorite *fav,
 
   // If there are more routes than MAX_ICONS, show "…"
   if (fav->route_count > MAX_ICONS) {
-    graphics_context_set_text_color(ctx, GColorDarkGray);
+    graphics_context_set_text_color(ctx, GColorBlack);
     GRect more_bounds = GRect(x_offset, ICON_Y + 4, 14, 20);
     graphics_draw_text(ctx, "\xe2\x80\xa6", // UTF-8 ellipsis
                        fonts_get_system_font(FONT_KEY_GOTHIC_14),
@@ -301,6 +301,29 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
 
 GColor ui_gcolor_from_rgb(uint8_t r, uint8_t g, uint8_t b) {
   return GColorFromRGB(r, g, b);
+}
+
+void ui_draw_screen_header(GContext *ctx, GRect bounds,
+                            const char *title, bool star) {
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+
+  int16_t title_w = bounds.size.w - NT_PADDING_X - (star ? 22 : NT_PADDING_X);
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, title,
+                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(NT_PADDING_X, 2, title_w, bounds.size.h - 4),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+
+  if (star) {
+    graphics_draw_text(ctx, "\xe2\x98\x85",
+                       fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(bounds.size.w - 22, (bounds.size.h - 16) / 2, 18, 16),
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  }
+
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, GRect(0, bounds.size.h - 2, bounds.size.w, 2), 0, GCornerNone);
 }
 
 void ui_format_routes(const Favorite *fav, char *buf, size_t buf_size) {

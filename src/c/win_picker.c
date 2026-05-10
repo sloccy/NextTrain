@@ -6,6 +6,19 @@
 #include <string.h>
 #include <stdlib.h>
 
+// Station picker header
+static Layer *s_sta_header_layer;
+static void prv_sta_draw_header(Layer *layer, GContext *ctx) {
+  ui_draw_screen_header(ctx, layer_get_bounds(layer), "Stations", false);
+}
+
+// Route picker header (title set from slug at window-load time)
+static Layer *s_rte_header_layer;
+static char   s_rte_header_title[40];
+static void prv_rte_draw_header(Layer *layer, GContext *ctx) {
+  ui_draw_screen_header(ctx, layer_get_bounds(layer), s_rte_header_title, false);
+}
+
 // ─── Station Picker ───────────────────────────────────────────────────────────
 
 #define STA_WATCHDOG_MS 6000
@@ -125,7 +138,12 @@ static void prv_sta_window_load(Window *win) {
   Layer *root = window_get_root_layer(win);
   GRect bounds = layer_get_bounds(root);
 
-  s_sta_menu = menu_layer_create(bounds);
+  s_sta_header_layer = layer_create(GRect(0, 0, bounds.size.w, NT_HEADER_H));
+  layer_set_update_proc(s_sta_header_layer, prv_sta_draw_header);
+  layer_add_child(root, s_sta_header_layer);
+
+  GRect menu_bounds = GRect(0, NT_HEADER_H, bounds.size.w, bounds.size.h - NT_HEADER_H);
+  s_sta_menu = menu_layer_create(menu_bounds);
   menu_layer_set_callbacks(s_sta_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows  = prv_sta_num_rows,
     .get_cell_height = prv_sta_row_height,
@@ -152,8 +170,8 @@ static void prv_sta_window_unload(Window *win) {
   prv_sta_cancel_watchdog("window unload");
   comm_set_stations_ready_callback(NULL);
   comm_set_status_callback(NULL);
-  menu_layer_destroy(s_sta_menu);
-  s_sta_menu = NULL;
+  menu_layer_destroy(s_sta_menu); s_sta_menu = NULL;
+  layer_destroy(s_sta_header_layer); s_sta_header_layer = NULL;
   s_sta_error = false;
   window_destroy(win);
   s_sta_window = NULL;
@@ -241,7 +259,7 @@ static void prv_rte_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, v
 
   // Route icon
   GColor color = ui_gcolor_from_rgb(rt->r, rt->g, rt->b);
-  GRect icon = GRect(8, (bounds.size.h - 24) / 2, 24, 24);
+  GRect icon = GRect(8, (bounds.size.h - 28) / 2, 28, 28);
   ui_draw_route_icon(ctx, icon, rt->route[0], color);
 
   // Headsign + direction stack centered on icon midline
@@ -255,14 +273,14 @@ static void prv_rte_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, v
   int16_t stack_h  = TEXT_BOX_H + DIR_BOX_H;
   int16_t text_top = icon_cy - stack_h / 2;
 
-  GRect text = GRect(40, text_top, bounds.size.w - 72, TEXT_BOX_H);
+  GRect text = GRect(44, text_top, bounds.size.w - 76, TEXT_BOX_H);
   graphics_draw_text(ctx, label, fonts_get_system_font(FONT_KEY_GOTHIC_18),
                      text, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
   char dir_label[4];
   snprintf(dir_label, sizeof(dir_label), "(%c)", rt->dir);
   GRect dir_rect = GRect(text.origin.x, text_top + TEXT_BOX_H, text.size.w, DIR_BOX_H);
-  graphics_context_set_text_color(ctx, GColorDarkGray);
+  graphics_context_set_text_color(ctx, GColorBlack);
   graphics_draw_text(ctx, dir_label, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      dir_rect, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
@@ -308,7 +326,13 @@ static void prv_rte_window_load(Window *win) {
   GRect bounds = layer_get_bounds(root);
   memset(s_selected, 0, sizeof(s_selected));
 
-  s_rte_menu = menu_layer_create(bounds);
+  slug_to_display(s_rte_ctx->slug, s_rte_header_title, sizeof(s_rte_header_title));
+  s_rte_header_layer = layer_create(GRect(0, 0, bounds.size.w, NT_HEADER_H));
+  layer_set_update_proc(s_rte_header_layer, prv_rte_draw_header);
+  layer_add_child(root, s_rte_header_layer);
+
+  GRect menu_bounds = GRect(0, NT_HEADER_H, bounds.size.w, bounds.size.h - NT_HEADER_H);
+  s_rte_menu = menu_layer_create(menu_bounds);
   menu_layer_set_callbacks(s_rte_menu, NULL, (MenuLayerCallbacks){
     .get_num_sections  = prv_rte_num_sections,
     .get_num_rows      = prv_rte_num_rows,
@@ -325,8 +349,8 @@ static void prv_rte_window_load(Window *win) {
 }
 
 static void prv_rte_window_unload(Window *win) {
-  menu_layer_destroy(s_rte_menu);
-  s_rte_menu = NULL;
+  menu_layer_destroy(s_rte_menu); s_rte_menu = NULL;
+  layer_destroy(s_rte_header_layer); s_rte_header_layer = NULL;
   if (s_rte_ctx) { free(s_rte_ctx); s_rte_ctx = NULL; }
   window_destroy(win);
   s_rte_window = NULL;

@@ -439,8 +439,12 @@ static void prv_parse_arrivals_payload(ArrivalCache *cache,
 
     LP(route);
     LP(headsign);
-    LP(time);
-    LP(label);
+
+    // Raw numeric fields: u16 mins (big-endian) + s8 st
+    if (p + 3 > end) return;
+    e->mins = ((uint16_t)p[0] << 8) | p[1];
+    e->st   = (int8_t)p[2];
+    p += 3;
 
     #undef LP
     cache->count++;

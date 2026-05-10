@@ -6,9 +6,14 @@
 #include <string.h>
 
 static Window       *s_window;
+static Layer        *s_header_layer;
 static MenuLayer    *s_menu;
 static ActionMenu   *s_action_menu;
 static uint8_t       s_selected_row;
+
+static void prv_draw_header_layer(Layer *layer, GContext *ctx) {
+  ui_draw_screen_header(ctx, layer_get_bounds(layer), "Edit Favorites", false);
+}
 
 // ─── ActionMenu ───────────────────────────────────────────────────────────────
 
@@ -91,7 +96,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
   if (state_get_favorite_count() == 0) {
-    graphics_context_set_text_color(ctx, GColorDarkGray);
+    graphics_context_set_text_color(ctx, GColorBlack);
     graphics_draw_text(ctx, "No favorites to edit",
                        fonts_get_system_font(FONT_KEY_GOTHIC_18),
                        bounds, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
@@ -108,7 +113,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   ui_draw_favorite_icon(ctx, icon_origin, fav, stations);
 
   // Reorder arrows indicator (right edge)
-  graphics_context_set_text_color(ctx, GColorDarkGray);
+  graphics_context_set_text_color(ctx, GColorBlack);
   GRect arrows = GRect(bounds.size.w - 20, (bounds.size.h - 18) / 2, 18, 18);
   graphics_draw_text(ctx, "\xe2\x87\x85", // ⇅
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
@@ -132,7 +137,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   // Routes subtitle
   char routes_str[40] = {0};
   ui_format_routes(fav, routes_str, sizeof(routes_str));
-  graphics_context_set_text_color(ctx, GColorDarkGray);
+  graphics_context_set_text_color(ctx, GColorBlack);
   GRect sub_r = GRect(text_x, 28, bounds.size.w - text_x - 24, 16);
   graphics_draw_text(ctx, routes_str,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
@@ -150,7 +155,12 @@ static void prv_window_load(Window *win) {
   Layer *root  = window_get_root_layer(win);
   GRect bounds = layer_get_bounds(root);
 
-  s_menu = menu_layer_create(bounds);
+  s_header_layer = layer_create(GRect(0, 0, bounds.size.w, NT_HEADER_H));
+  layer_set_update_proc(s_header_layer, prv_draw_header_layer);
+  layer_add_child(root, s_header_layer);
+
+  GRect menu_bounds = GRect(0, NT_HEADER_H, bounds.size.w, bounds.size.h - NT_HEADER_H);
+  s_menu = menu_layer_create(menu_bounds);
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows    = prv_num_rows,
     .get_cell_height = prv_row_height,
@@ -164,8 +174,8 @@ static void prv_window_load(Window *win) {
 }
 
 static void prv_window_unload(Window *win) {
-  menu_layer_destroy(s_menu);
-  s_menu = NULL;
+  menu_layer_destroy(s_menu); s_menu = NULL;
+  layer_destroy(s_header_layer); s_header_layer = NULL;
   s_window = NULL;
 }
 

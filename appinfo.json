@@ -3,7 +3,7 @@
   "shortName": "NextTrain",
   "longName": "Next Train RTD",
   "companyName": "Brendan Slocum",
-  "versionLabel": "1.0",
+  "versionLabel": "1.1",
   "sdkVersion": "3",
   "enableMultiJS": true,
   "targetPlatforms": ["emery"],
