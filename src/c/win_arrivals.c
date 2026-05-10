@@ -4,14 +4,25 @@
 #include "state.h"
 #include "comm.h"
 #include "ui.h"
+#include "format.h"
 #include <string.h>
 #include <stdlib.h>
 
-#define ROW_HEIGHT 56
-#define HEADER_HEIGHT 30
-#define ICON_SIZE 24
-#define REFRESH_MIN_SEC 30   // never poll faster than every 30 s
-#define REFRESH_MAX_SEC 300  // cap stale far-future next_refresh at 5 min
+#define ROW_HEIGHT    NT_ROW_H_DATA   // 60
+#define HEADER_HEIGHT NT_HEADER_H     // 32
+#define ICON_SIZE     28
+#define REFRESH_MIN_SEC 30
+#define REFRESH_MAX_SEC 300
+
+// Column layout (200 px screen)
+// [8] [ICON 28] [8] [LEFT TEXT 88] [4] [RIGHT TEXT 60] [4]
+#define COL_ICON_X    8
+#define COL_LEFT_X   44   // COL_ICON_X + ICON_SIZE + 8
+#define COL_LEFT_W   88
+#define COL_RIGHT_X  136  // COL_LEFT_X + COL_LEFT_W + 4
+#define COL_RIGHT_W  60
+#define ROW_TOP_H    22   // headsign / wall-time box height
+#define ROW_BOT_H    16   // status / countdown box height
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -21,11 +32,11 @@ static MenuLayer   *s_menu;
 static ActionMenu  *s_action_menu;
 static AppTimer    *s_refresh_timer;
 static ArrivalsParams s_params;
-static bool         s_waiting;       // true if no data yet for initial load
-static bool         s_have_status;   // true if last update was a status, not arrivals
+static bool         s_waiting;
+static bool         s_have_status;
 static CommStatus   s_last_status;
-static int8_t       s_existing_fav_idx; // index of matching favorite, or -1
-static uint8_t      s_new_fav_idx;      // index of just-added favorite
+static int8_t       s_existing_fav_idx;
+static uint8_t      s_new_fav_idx;
 
 // ─── Auto-refresh timer ───────────────────────────────────────────────────────
 
@@ -67,25 +78,19 @@ static void prv_status_received(uint8_t query_index, CommStatus status) {
   if (s_menu) menu_layer_reload_data(s_menu);
 }
 
+// ─── Minute tick (live countdown) ────────────────────────────────────────────
+
+static void prv_tick(struct tm *tt, TimeUnits u) {
+  if (s_menu) layer_mark_dirty(menu_layer_get_layer(s_menu));
+}
+
 // ─── Header layer draw ────────────────────────────────────────────────────────
 
 static void prv_draw_header(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
-
   char display_name[40];
   slug_to_display(s_params.station_slug, display_name, sizeof(display_name));
-  graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_draw_text(ctx, display_name,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(0, 2, bounds.size.w, HEADER_HEIGHT - 4),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-
-  // Divider line
-  graphics_context_set_stroke_color(ctx, GColorLightGray);
-  graphics_draw_line(ctx, GPoint(0, bounds.size.h - 1),
-                          GPoint(bounds.size.w, bounds.size.h - 1));
+  ui_draw_screen_header(ctx, bounds, display_name, s_params.from_favorite);
 }
 
 // ─── MenuLayer callbacks ──────────────────────────────────────────────────────
@@ -94,8 +99,6 @@ static const ArrivalCache *prv_cache(void) {
   return state_get_arrival_cache(s_params.query_index);
 }
 
-// Layout: 0..N-1 arrival rows (or 1 status row if N == 0), then optional
-// "Add Favorite" at the end in search mode.
 static uint8_t prv_arrival_count(void) {
   const ArrivalCache *c = prv_cache();
   return (c && c->valid) ? c->count : 0;
@@ -103,14 +106,14 @@ static uint8_t prv_arrival_count(void) {
 
 static uint16_t prv_add_fav_row(void) {
   uint8_t arrivals = prv_arrival_count();
-  return arrivals == 0 ? 1 : arrivals; // status row occupies row 0 when empty
+  return arrivals == 0 ? 1 : arrivals;
 }
 
 static uint16_t prv_num_rows(MenuLayer *ml, uint16_t s, void *ctx) {
   if (s_waiting) return 1;
   uint16_t base = prv_arrival_count();
   if (base == 0) base = 1;
-  return base + 1; // always show Add/Remove row at bottom
+  return base + 1;
 }
 
 static int16_t prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) {
@@ -120,8 +123,15 @@ static int16_t prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) {
 static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void *c) {
   GRect bounds = layer_get_bounds(cell);
   bool  hi     = menu_cell_layer_is_highlighted(cell);
+
   graphics_context_set_fill_color(ctx, hi ? GColorLightGray : GColorWhite);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+
+  // 1 px black bottom rule (row divider)
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_draw_line(ctx, GPoint(0, bounds.size.h - 1),
+                          GPoint(bounds.size.w - 1, bounds.size.h - 1));
+
   graphics_context_set_text_color(ctx, GColorBlack);
 
   if (s_waiting) {
@@ -134,12 +144,16 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   const ArrivalCache *cache = prv_cache();
   uint8_t arrivals = prv_arrival_count();
 
-  // Action row (always last): "Remove Favorite" if already saved, else "Add Favorite"
+  // Action row (always last): Add / Remove Favorite
   if (idx->row == prv_add_fav_row()) {
     const char *label = (s_existing_fav_idx >= 0)
                       ? "\xe2\x98\x85 Remove Favorite"
-                      : "\xe2\x98\x85 Add Favorite";
-    menu_cell_basic_draw(ctx, cell, label, NULL, NULL);
+                      : "+ Add Favorite";
+    graphics_draw_text(ctx, label,
+                       fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                       GRect(NT_PADDING_X, (bounds.size.h - 22) / 2,
+                             bounds.size.w - NT_PADDING_X * 2, 22),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     return;
   }
 
@@ -162,61 +176,58 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   if (idx->row >= arrivals) return;
   const ArrivalEntry *e = &cache->entries[idx->row];
 
-  // Route icon
-  GColor color  = ui_gcolor_from_rgb(e->r, e->g, e->b);
-  GRect icon_r  = GRect(8, (bounds.size.h - ICON_SIZE) / 2, ICON_SIZE, ICON_SIZE);
+  // ── Route badge ─────────────────────────────────────────────────────────────
+  GColor color = ui_gcolor_from_rgb(e->r, e->g, e->b);
+  GRect icon_r = GRect(COL_ICON_X, (bounds.size.h - ICON_SIZE) / 2, ICON_SIZE, ICON_SIZE);
   ui_draw_route_icon(ctx, icon_r, e->route[0], color);
 
-  // Time + label two-line stack centered on icon midline
-  int16_t text_x = 8 + ICON_SIZE + 8;
-  const int16_t TIME_BOX_H  = 22;
-  const int16_t LABEL_BOX_H = 16;
-  const int16_t HS_BOX_H    = 16;
-  int16_t icon_cy   = bounds.size.h / 2;
-  int16_t stack_h   = TIME_BOX_H + LABEL_BOX_H;
-  int16_t time_top  = icon_cy - stack_h / 2;
-  int16_t label_top = time_top + TIME_BOX_H;
+  // Vertical centering geometry — same for left and right columns
+  int16_t midline  = bounds.size.h / 2;
+  int16_t stack_h  = ROW_TOP_H + ROW_BOT_H;
+  int16_t top_y    = midline - stack_h / 2;
+  int16_t bot_y    = top_y + ROW_TOP_H;
 
-  GRect time_r = GRect(text_x, time_top, 70, TIME_BOX_H);
+  // ── Left column: headsign (top) / status (bottom) ───────────────────────────
   graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_draw_text(ctx, e->time,
+  graphics_draw_text(ctx, e->headsign,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     time_r, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
-
-  bool is_canceled  = (strcmp(e->label, "Canceled") == 0 || strcmp(e->label, "Skipped") == 0);
-  bool is_late      = (strncmp(e->label, "Late ", 5) == 0);
-  bool is_scheduled = (strcmp(e->label, "Scheduled") == 0);
-  bool is_live      = (!is_canceled && !is_late && !is_scheduled && e->label[0] != '\0');
-  GColor label_color;
-  GFont  label_font;
-  if (is_canceled || is_late) {
-    label_color = GColorRed;
-    label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
-  } else if (is_live) {
-    label_color = GColorIslamicGreen;
-    label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
-  } else {
-    label_color = GColorDarkGray;
-    label_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-  }
-  GRect label_r = GRect(text_x, label_top, 90, LABEL_BOX_H);
-  graphics_context_set_text_color(ctx, label_color);
-  graphics_draw_text(ctx, e->label, label_font, label_r,
+                     GRect(COL_LEFT_X, top_y, COL_LEFT_W, ROW_TOP_H),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-  // Headsign centered on same icon midline
-  int16_t hs_x = text_x + 80;
-  GRect hs_r   = GRect(hs_x, icon_cy - HS_BOX_H / 2, bounds.size.w - hs_x - 4, HS_BOX_H);
-  graphics_context_set_text_color(ctx, GColorDarkGray);
-  graphics_draw_text(ctx, e->headsign,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     hs_r, GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+  char status_buf[12];
+  GColor status_color;
+  bool   status_bold;
+  format_status_label(e->st, status_buf, sizeof(status_buf), &status_color, &status_bold);
+
+  graphics_context_set_text_color(ctx, status_color);
+  graphics_draw_text(ctx, status_buf,
+                     fonts_get_system_font(status_bold
+                                           ? FONT_KEY_GOTHIC_14_BOLD
+                                           : FONT_KEY_GOTHIC_14),
+                     GRect(COL_LEFT_X, bot_y, COL_LEFT_W, ROW_BOT_H),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+
+  // ── Right column: wall time (top) / countdown (bottom), right-aligned ───────
+  char wall_buf[10];
+  format_wall_time(e->mins, wall_buf, sizeof(wall_buf));
+
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, wall_buf,
+                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(COL_RIGHT_X, top_y, COL_RIGHT_W, ROW_TOP_H),
+                     GTextOverflowModeFill, GTextAlignmentRight, NULL);
+
+  char cd_buf[10];
+  uint16_t pred = format_arrival_predicted_min(e->mins, e->st);
+  format_countdown(pred, cd_buf, sizeof(cd_buf));
+
+  graphics_draw_text(ctx, cd_buf,
+                     fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                     GRect(COL_RIGHT_X, bot_y, COL_RIGHT_W, ROW_BOT_H),
+                     GTextOverflowModeFill, GTextAlignmentRight, NULL);
 }
 
 static void prv_dismiss_to_home(void *ctx) {
-  // Navigation depth in search mode: home → station picker → route picker → arrivals.
-  // Remove the two pickers silently then animate arrivals off so it looks like
-  // a clean return to home.
   window_stack_pop(false);  // arrivals
   window_stack_pop(false);  // route picker
   window_stack_pop(true);   // station picker → home
@@ -250,7 +261,6 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   if (idx->row != prv_add_fav_row()) return;
 
   if (s_existing_fav_idx >= 0) {
-    // "Remove Favorite" — confirm before deleting
     ActionMenuLevel *root = action_menu_level_create(1);
     action_menu_level_add_action(root, "Confirm Delete", prv_delete_action, NULL);
     ActionMenuConfig cfg = {
@@ -262,7 +272,6 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
     return;
   }
 
-  // "Add Favorite" — parse routes then prompt to rename
   Favorite fav;
   memset(&fav, 0, sizeof(fav));
   strncpy(fav.station_slug, s_params.station_slug, sizeof(fav.station_slug) - 1);
@@ -332,22 +341,22 @@ static void prv_window_load(Window *win) {
   comm_set_arrivals_callback(prv_arrivals_received);
   comm_set_status_callback(prv_status_received);
 
-  // If we have cached data already (from background prefetch), render immediately
   const ArrivalCache *cached = prv_cache();
   if (cached && cached->valid) {
     s_waiting = false;
     if (cached->next_refresh) prv_schedule_refresh(cached->next_refresh);
   }
 
-  // Always fire a fresh fetch regardless
   prv_do_refresh();
+  tick_timer_service_subscribe(MINUTE_UNIT, prv_tick);
 }
 
 static void prv_window_unload(Window *win) {
+  tick_timer_service_unsubscribe();
   if (s_refresh_timer) { app_timer_cancel(s_refresh_timer); s_refresh_timer = NULL; }
   comm_set_arrivals_callback(NULL);
   comm_set_status_callback(NULL);
-  menu_layer_destroy(s_menu);   s_menu = NULL;
+  menu_layer_destroy(s_menu);    s_menu = NULL;
   layer_destroy(s_header_layer); s_header_layer = NULL;
   window_destroy(win);
   s_window = NULL;

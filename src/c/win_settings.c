@@ -2,13 +2,19 @@
 #include "win_edit_favorites.h"
 #include "comm.h"
 #include "state.h"
+#include "ui.h"
 
 #define REFRESH_WATCHDOG_MS 8000
 
 static Window    *s_window;
+static Layer     *s_header_layer;
 static MenuLayer *s_menu;
 static bool       s_refreshing;
 static AppTimer  *s_watchdog;
+
+static void prv_draw_header_layer(Layer *layer, GContext *ctx) {
+  ui_draw_screen_header(ctx, layer_get_bounds(layer), "Settings", false);
+}
 
 static void prv_cancel_watchdog(const char *why) {
   if (s_watchdog) {
@@ -77,7 +83,12 @@ static void prv_window_load(Window *win) {
   Layer *root  = window_get_root_layer(win);
   GRect bounds = layer_get_bounds(root);
 
-  s_menu = menu_layer_create(bounds);
+  s_header_layer = layer_create(GRect(0, 0, bounds.size.w, NT_HEADER_H));
+  layer_set_update_proc(s_header_layer, prv_draw_header_layer);
+  layer_add_child(root, s_header_layer);
+
+  GRect menu_bounds = GRect(0, NT_HEADER_H, bounds.size.w, bounds.size.h - NT_HEADER_H);
+  s_menu = menu_layer_create(menu_bounds);
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows    = prv_num_rows,
     .get_cell_height = prv_row_height,
@@ -94,8 +105,8 @@ static void prv_window_unload(Window *win) {
   prv_cancel_watchdog("window unload");
   comm_set_stations_ready_callback(NULL);
   comm_set_status_callback(NULL);
-  menu_layer_destroy(s_menu);
-  s_menu = NULL;
+  menu_layer_destroy(s_menu); s_menu = NULL;
+  layer_destroy(s_header_layer); s_header_layer = NULL;
   s_refreshing = false;
   window_destroy(win);
   s_window = NULL;

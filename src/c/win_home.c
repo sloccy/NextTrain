@@ -5,6 +5,7 @@
 #include "state.h"
 #include "comm.h"
 #include "ui.h"
+#include "format.h"
 #include <string.h>
 
 // ─── Row geometry ─────────────────────────────────────────────────────────────
@@ -12,8 +13,8 @@
 #define SECTION_FAVORITES 0
 #define SECTION_ACTIONS   1
 
-#define ROW_HEIGHT_FAV    52
-#define ROW_HEIGHT_ACTION 40
+#define ROW_HEIGHT_FAV    NT_ROW_H_FAV     // 56
+#define ROW_HEIGHT_ACTION NT_ROW_H_ACTION  // 40
 #define ICON_SIZE         24
 #define ICON_MARGIN_LEFT   8
 #define TEXT_MARGIN_LEFT   8
@@ -31,12 +32,18 @@ static void prv_arrivals_landed(uint8_t qi, const ArrivalCache *cache) {
   if (s_menu) menu_layer_reload_data(s_menu);
 }
 
+static void prv_tick(struct tm *tt, TimeUnits u) {
+  if (s_menu) menu_layer_reload_data(s_menu);
+}
+
 static void prv_window_appear(Window *w) {
   comm_set_arrivals_callback(prv_arrivals_landed);
+  tick_timer_service_subscribe(MINUTE_UNIT, prv_tick);
 }
 
 static void prv_window_disappear(Window *w) {
   comm_set_arrivals_callback(NULL);
+  tick_timer_service_unsubscribe();
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -139,13 +146,17 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
 
     char sub[32];
     if (cache && cache->valid && cache->count > 0) {
-      snprintf(sub, sizeof(sub), "Next: %s (%s)",
-               cache->entries[0].time, cache->entries[0].route);
+      char wall[10], cd[10];
+      uint16_t pred = format_arrival_predicted_min(cache->entries[0].mins,
+                                                   cache->entries[0].st);
+      format_wall_time(cache->entries[0].mins, wall, sizeof(wall));
+      format_countdown(pred, cd, sizeof(cd));
+      snprintf(sub, sizeof(sub), "Next: %s \xc2\xb7 %s", wall, cd);
     } else {
       strncpy(sub, "Loading\xe2\x80\xa6", sizeof(sub));
     }
     GRect sub_bounds = GRect(x, name_top + NAME_BOX_H, text_w, SUB_BOX_H);
-    graphics_context_set_text_color(ctx, GColorDarkGray);
+    graphics_context_set_text_color(ctx, GColorBlack);
     graphics_draw_text(ctx, sub, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                        sub_bounds, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     return;

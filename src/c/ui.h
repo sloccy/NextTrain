@@ -3,6 +3,15 @@
 #include <pebble.h>
 #include "state.h"
 
+// ─── Shared layout constants ──────────────────────────────────────────────────
+
+#define NT_HEADER_H      32
+#define NT_ROW_H_DATA    60
+#define NT_ROW_H_FAV     56
+#define NT_ROW_H_PICKER  52
+#define NT_ROW_H_ACTION  40
+#define NT_PADDING_X      8
+
 // Draw a route icon: rounded square in bg_color, white bold letter centered.
 // bounds: the target GRect (typically 24×24 or 26×26).
 void ui_draw_route_icon(GContext *ctx, GRect bounds, char letter, GColor bg_color);
@@ -25,3 +34,8 @@ GColor ui_gcolor_from_rgb(uint8_t r, uint8_t g, uint8_t b);
 
 // Format a Favorite's routes as "A→E, B→N" into buf.
 void ui_format_routes(const Favorite *fav, char *buf, size_t buf_size);
+
+// Draw the editorial screen header: white fill, title left-aligned in
+// GOTHIC_18_BOLD, optional ★ glyph right-aligned, 2 px solid black bottom rule.
+void ui_draw_screen_header(GContext *ctx, GRect bounds,
+                            const char *title, bool star);

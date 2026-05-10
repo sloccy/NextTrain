@@ -168,6 +168,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
         var resBin = new Uint8Array(xhr.response);
         
         // Decode lean binary: [count] × ([route lpStr][dir u8][time_mins u16][status_s8])
+        // Watch format:       [count] × ([r,g,b][route lpStr][headsign lpStr][u16 mins BE][s8 st])
         var pos = 0;
         var count = resBin[pos++];
         var finalBuf = [count];
@@ -209,22 +210,13 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
           var mins = (resBin[pos++] << 8) | resBin[pos++];
           var status = new Int8Array([resBin[pos++]])[0];
 
-          var label = "";
-          if (status === -128) label = "Canceled";
-          else if (status === -127) label = "Skipped";
-          else if (status === -126) label = "On time";
-          else if (status === 0) label = "Scheduled";
-          else if (status > 0) label = "Late " + status + " min";
-          else if (status < 0) label = "Early " + Math.abs(status) + " min";
-
           var static_ = lookup[route + '.' + dir] || { r: 128, g: 128, b: 128, h: '' };
-          
-          // Re-pack into watch format: [r,g,b][route lpStr][hs lpStr][time lpStr][label lpStr]
+
           finalBuf.push(static_.r, static_.g, static_.b);
           lpStrWatch(finalBuf, route, 8);
           lpStrWatch(finalBuf, static_.h, 24);
-          lpStrWatch(finalBuf, formatTime(mins), 12);
-          lpStrWatch(finalBuf, label, 32);
+          finalBuf.push((mins >> 8) & 0xFF, mins & 0xFF);
+          finalBuf.push(status & 0xFF);
         }
 
         sendDict({
@@ -247,15 +239,6 @@ function lpStrWatch(bytes, s, maxLen) {
   var str = (s || '').slice(0, maxLen);
   bytes.push(str.length);
   for (var i = 0; i < str.length; i++) bytes.push(str.charCodeAt(i) & 0xFF);
-}
-
-function formatTime(mins) {
-  var h = Math.floor(mins / 60);
-  var m = mins % 60;
-  var p = h >= 12 ? 'PM' : 'AM';
-  h = h % 12;
-  if (h === 0) h = 12;
-  return h + ':' + (m < 10 ? '0' : '') + m + ' ' + p;
 }
 
 // ─── Refresh stations ─────────────────────────────────────────────────────────

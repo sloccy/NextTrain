@@ -43,8 +43,8 @@ typedef struct {
   uint8_t       r, g, b;
   char          route[4];
   char          headsign[25];
-  char          time[10];
-  char          label[20];
+  uint16_t      mins;  // backend minute-of-day (0..1439)
+  int8_t        st;    // status sentinel/delta; see format_status_label()
 } ArrivalEntry;
 
 typedef struct {
