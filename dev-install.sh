@@ -9,7 +9,7 @@
 set -euo pipefail
 
 INDEX="src/pkjs/index.js"
-PROD_URL="https://nexttrainworker.sloccy.workers.dev"
+PROD_URL="https://nt.sloccy.workers.dev"
 DEV_URL="http://localhost:8787"
 
 # Patch URL
