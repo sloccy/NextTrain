@@ -15,7 +15,7 @@ static void prv_sta_draw_header(Layer *layer, GContext *ctx) {
 // Route picker header (title set from slug at window-load time)
 static Layer *s_rte_header_layer;
 static char   s_rte_header_title[40];
-static void prv_rte_draw_header(Layer *layer, GContext *ctx) {
+static void prv_rte_draw_screen_header(Layer *layer, GContext *ctx) {
   ui_draw_screen_header(ctx, layer_get_bounds(layer), s_rte_header_title, false);
 }
 
@@ -328,7 +328,7 @@ static void prv_rte_window_load(Window *win) {
 
   slug_to_display(s_rte_ctx->slug, s_rte_header_title, sizeof(s_rte_header_title));
   s_rte_header_layer = layer_create(GRect(0, 0, bounds.size.w, NT_HEADER_H));
-  layer_set_update_proc(s_rte_header_layer, prv_rte_draw_header);
+  layer_set_update_proc(s_rte_header_layer, prv_rte_draw_screen_header);
   layer_add_child(root, s_rte_header_layer);
 
   GRect menu_bounds = GRect(0, NT_HEADER_H, bounds.size.w, bounds.size.h - NT_HEADER_H);
