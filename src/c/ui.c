@@ -33,7 +33,7 @@ void ui_draw_route_icon(GContext *ctx, GRect bounds, char letter, GColor bg_colo
   graphics_fill_rect(ctx, bounds, ICON_RADIUS, GCornersAll);
 
   char text[2] = {letter, 0};
-  GRect text_bounds = GRect(bounds.origin.x, bounds.origin.y - 1,
+  GRect text_bounds = GRect(bounds.origin.x, bounds.origin.y + 1,
                             bounds.size.w, bounds.size.h + 2);
   prv_draw_text_haloed(ctx, text,
                        fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
@@ -145,7 +145,7 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
     graphics_fill_rect(ctx, sq, 3, GCornersAll);
 
     char text[2] = { fav->routes[0].route[0], 0 };
-    GRect slot = GRect(sx, sy - 1, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
+    GRect slot = GRect(sx, sy, FAV_SQUARE_SIZE, FAV_SQUARE_SIZE + 2);
     prv_draw_text_haloed(ctx, text,
                          fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD), slot);
   } else {
