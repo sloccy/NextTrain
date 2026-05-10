@@ -57,6 +57,7 @@ function fetchStations(cb) {
   console.log('[pkjs] stations XHR GET ' + url);
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
+  try { xhr.setRequestHeader('User-Agent', 'NextTrain/1.1'); } catch (e) {}
   xhr.responseType = 'arraybuffer';
   xhr.timeout = 10000;
   xhr.onload = function() {
@@ -152,6 +153,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
 
       var xhr = new XMLHttpRequest();
       xhr.open('GET', url, true);
+      try { xhr.setRequestHeader('User-Agent', 'NextTrain/1.1'); } catch (e) {}
       xhr.responseType = 'arraybuffer';
       xhr.timeout = 8000;
 
