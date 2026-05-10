@@ -15,11 +15,12 @@
 #define REFRESH_MAX_SEC 300
 
 // Column layout (200 px screen)
-// [8] [ICON 28] [8] [LEFT TEXT 88] [4] [RIGHT TEXT 60] [4]
-#define COL_ICON_X    8
-#define COL_LEFT_X   44   // COL_ICON_X + ICON_SIZE + 8
-#define COL_LEFT_W   88
-#define COL_RIGHT_X  136  // COL_LEFT_X + COL_LEFT_W + 4
+// [4] [ICON 28] [4] [LEFT TEXT 116          ] [RIGHT TEXT 60] [4]
+//  0   4        32   36..152                   136..196
+#define COL_ICON_X    4
+#define COL_LEFT_X   36   // COL_ICON_X + ICON_SIZE + 4
+#define COL_LEFT_W   116
+#define COL_RIGHT_X  136
 #define COL_RIGHT_W  60
 #define ROW_TOP_H    22   // headsign / wall-time box height
 #define ROW_BOT_H    16   // status / countdown box height
