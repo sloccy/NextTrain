@@ -119,7 +119,22 @@ static int16_t prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) {
 }
 
 static int16_t prv_header_height(MenuLayer *ml, uint16_t section, void *ctx) {
-  return 0;
+  return prv_section_kind(section) == KIND_RECENT ? 16 : 0;
+}
+
+static void prv_draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *c) {
+  if (prv_section_kind(section) != KIND_RECENT) return;
+  GRect bounds = layer_get_bounds(cell);
+
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, "RECENT",
+                     fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                     GRect(8, 0, 60, bounds.size.h),
+                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+
+  int16_t y = bounds.size.h / 2 + 2;
+  graphics_context_set_stroke_color(ctx, GColorDarkGray);
+  graphics_draw_line(ctx, GPoint(56, y), GPoint(bounds.size.w - 8, y));
 }
 
 static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void *c) {
@@ -298,6 +313,7 @@ static void prv_window_load(Window *win) {
     .get_num_rows      = prv_num_rows,
     .get_cell_height   = prv_row_height,
     .get_header_height = prv_header_height,
+    .draw_header       = prv_draw_header,
     .draw_row          = prv_draw_row,
     .select_click      = prv_select,
     .select_long_click = prv_select_long,
