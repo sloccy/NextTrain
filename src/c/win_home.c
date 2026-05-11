@@ -10,19 +10,19 @@
 
 // ─── Row geometry ─────────────────────────────────────────────────────────────
 
-#define SECTION_FAVORITES 0
-#define SECTION_ACTIONS   1
-
 #define ROW_HEIGHT_FAV    NT_ROW_H_FAV     // 56
 #define ROW_HEIGHT_ACTION NT_ROW_H_ACTION  // 40
 #define ICON_SIZE         24
 #define ICON_MARGIN_LEFT   8
 #define TEXT_MARGIN_LEFT   8
 
+typedef enum { KIND_FAVORITES, KIND_RECENT, KIND_ACTIONS } SectionKind;
+
 // ─── State ────────────────────────────────────────────────────────────────────
 
-static Window    *s_window;
-static MenuLayer *s_menu;
+static Window      *s_window;
+static MenuLayer   *s_menu;
+static ActionMenu  *s_action_menu;
 
 static void prv_fav_renamed(void) {
   if (s_menu) menu_layer_reload_data(s_menu);
@@ -48,6 +48,37 @@ static void prv_window_disappear(Window *w) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+static bool prv_recent_visible(void) {
+  RecentSearch rec;
+  return state_get_recent_search(&rec) &&
+         state_get_show_recent() &&
+         !state_is_recent_dismissed();
+}
+
+static SectionKind prv_section_kind(uint16_t section) {
+  if (section == 0) return KIND_FAVORITES;
+  if (section == 1 && prv_recent_visible()) return KIND_RECENT;
+  return KIND_ACTIONS;
+}
+
+static void prv_build_recent_fav(const RecentSearch *rec, Favorite *out) {
+  memset(out, 0, sizeof(Favorite));
+  strncpy(out->station_slug, rec->station_slug, sizeof(out->station_slug) - 1);
+  const char *p = rec->routes;
+  while (*p && *(p + 1) && out->route_count < MAX_FAV_ROUTES) {
+    out->routes[out->route_count].route[0] = *p;
+    out->routes[out->route_count].route[1] = '\0';
+    switch (*(p + 1)) {
+      case '1': out->routes[out->route_count].dir = 'S'; break;
+      case '2': out->routes[out->route_count].dir = 'E'; break;
+      case '3': out->routes[out->route_count].dir = 'W'; break;
+      default:  out->routes[out->route_count].dir = 'N'; break;
+    }
+    out->route_count++;
+    p += 2;
+  }
+}
+
 static void prv_launch_favorite(uint8_t index) {
   Favorite *fav = state_get_favorite(index);
   if (!fav) return;
@@ -67,19 +98,24 @@ static void prv_launch_favorite(uint8_t index) {
 // ─── MenuLayer callbacks ──────────────────────────────────────────────────────
 
 static uint16_t prv_num_sections(MenuLayer *ml, void *ctx) {
-  return 2;
+  return (uint16_t)(2 + (prv_recent_visible() ? 1 : 0));
 }
 
 static uint16_t prv_num_rows(MenuLayer *ml, uint16_t section, void *ctx) {
-  if (section == SECTION_FAVORITES) {
-    uint8_t n = state_get_favorite_count();
-    return n > 0 ? n : 1; // 1 = empty-state placeholder
+  switch (prv_section_kind(section)) {
+    case KIND_FAVORITES: {
+      uint8_t n = state_get_favorite_count();
+      return n > 0 ? n : 1; // 1 = empty-state placeholder
+    }
+    case KIND_RECENT:  return 1;
+    case KIND_ACTIONS: return 2; // "New Search", "Settings"
   }
-  return 2; // "New Search", "Settings"
+  return 0;
 }
 
 static int16_t prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) {
-  return (idx->section == SECTION_FAVORITES) ? ROW_HEIGHT_FAV : ROW_HEIGHT_ACTION;
+  SectionKind k = prv_section_kind(idx->section);
+  return (k == KIND_ACTIONS) ? ROW_HEIGHT_ACTION : ROW_HEIGHT_FAV;
 }
 
 static int16_t prv_header_height(MenuLayer *ml, uint16_t section, void *ctx) {
@@ -95,7 +131,45 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
   graphics_context_set_text_color(ctx, GColorBlack);
 
-  if (idx->section == SECTION_FAVORITES) {
+  SectionKind kind = prv_section_kind(idx->section);
+
+  if (kind == KIND_RECENT) {
+    RecentSearch rec;
+    if (!state_get_recent_search(&rec)) return;
+
+    Favorite tmp_fav;
+    prv_build_recent_fav(&rec, &tmp_fav);
+    StationsCache *stations = state_get_stations();
+
+    GPoint icon_origin = GPoint(ICON_MARGIN_LEFT,
+                                bounds.origin.y + (bounds.size.h - 44) / 2);
+    int16_t x = ui_draw_favorite_icon(ctx, icon_origin, &tmp_fav, stations);
+    graphics_context_set_text_color(ctx, GColorBlack);
+
+    x += TEXT_MARGIN_LEFT;
+    char display_name[40];
+    slug_to_display(rec.station_slug, display_name, sizeof(display_name));
+
+    const int16_t NAME_BOX_H  = 22;
+    const int16_t SUB_BOX_H   = 16;
+    const int16_t VISUAL_NUDGE = 4;
+    int16_t icon_cy  = bounds.size.h / 2;
+    int16_t text_w   = bounds.size.w - x - 4;
+    int16_t stack_h  = NAME_BOX_H + SUB_BOX_H;
+    int16_t name_top = icon_cy - stack_h / 2 - VISUAL_NUDGE;
+
+    graphics_draw_text(ctx, display_name,
+                       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       GRect(x, name_top, text_w, NAME_BOX_H),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    graphics_draw_text(ctx, "Tap to view",
+                       fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                       GRect(x, name_top + NAME_BOX_H, text_w, SUB_BOX_H),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    return;
+  }
+
+  if (kind == KIND_FAVORITES) {
     uint8_t count = state_get_favorite_count();
     if (count == 0) {
       // Empty-state
@@ -169,14 +243,47 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   }
 }
 
+static void prv_dismiss_action_performed(ActionMenu *am, const ActionMenuItem *item, void *ctx) {
+  (void)am; (void)item; (void)ctx;
+  state_set_recent_dismissed(true);
+  if (s_menu) menu_layer_reload_data(s_menu);
+}
+
 static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
-  if (idx->section == SECTION_FAVORITES) {
-    if (state_get_favorite_count() == 0) { win_station_picker_push(); return; }
-    prv_launch_favorite(idx->row);
-    return;
+  switch (prv_section_kind(idx->section)) {
+    case KIND_FAVORITES:
+      if (state_get_favorite_count() == 0) { win_station_picker_push(); return; }
+      prv_launch_favorite(idx->row);
+      break;
+    case KIND_RECENT: {
+      RecentSearch rec;
+      if (!state_get_recent_search(&rec)) break;
+      ArrivalsParams params;
+      memset(&params, 0, sizeof(params));
+      strncpy(params.station_slug, rec.station_slug, sizeof(params.station_slug) - 1);
+      strncpy(params.routes,       rec.routes,       sizeof(params.routes) - 1);
+      params.query_index   = QUERY_INDEX_TRANSIENT;
+      params.from_favorite = false;
+      win_arrivals_push(&params);
+      break;
+    }
+    case KIND_ACTIONS:
+      if (idx->row == 0) win_station_picker_push();
+      else               win_settings_push();
+      break;
   }
-  if (idx->row == 0) win_station_picker_push();
-  else               win_settings_push();
+}
+
+static void prv_select_long(MenuLayer *ml, MenuIndex *idx, void *ctx) {
+  if (prv_section_kind(idx->section) != KIND_RECENT) return;
+  ActionMenuLevel *root = action_menu_level_create(1);
+  action_menu_level_add_action(root, "Dismiss", prv_dismiss_action_performed, NULL);
+  ActionMenuConfig cfg = {
+    .root_level = root,
+    .colors     = { .background = GColorWhite, .foreground = GColorBlack },
+    .align      = ActionMenuAlignTop,
+  };
+  s_action_menu = action_menu_open(&cfg);
 }
 
 // ─── Window lifecycle ─────────────────────────────────────────────────────────
@@ -193,6 +300,7 @@ static void prv_window_load(Window *win) {
     .get_header_height = prv_header_height,
     .draw_row          = prv_draw_row,
     .select_click      = prv_select,
+    .select_long_click = prv_select_long,
   });
   menu_layer_set_normal_colors(s_menu, GColorWhite, GColorBlack);
   menu_layer_set_highlight_colors(s_menu, GColorLightGray, GColorBlack);

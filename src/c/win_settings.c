@@ -1,5 +1,6 @@
 #include "win_settings.h"
 #include "win_edit_favorites.h"
+#include "win_home.h"
 #include "comm.h"
 #include "state.h"
 #include "ui.h"
@@ -36,11 +37,31 @@ static void prv_watchdog_fire(void *ctx) {
   if (s_menu) menu_layer_reload_data(s_menu);
 }
 
-static uint16_t prv_num_rows(MenuLayer *ml, uint16_t s, void *ctx) { return 2; }
+// Row indices
+#define ROW_SHOW_RECENT  0
+#define ROW_REFRESH      1
+#define ROW_EDIT_FAVS    2
+
+static uint16_t prv_num_rows(MenuLayer *ml, uint16_t s, void *ctx) { return 3; }
 static int16_t  prv_row_height(MenuLayer *ml, MenuIndex *idx, void *ctx) { return 44; }
 
 static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void *c) {
-  if (idx->row == 0) {
+  GRect bounds = layer_get_bounds(cell);
+
+  if (idx->row == ROW_SHOW_RECENT) {
+    menu_cell_basic_draw(ctx, cell, "Show Last Search", NULL, NULL);
+    // Checkbox on the right edge
+    bool on = state_get_show_recent();
+    GRect cb = GRect(bounds.size.w - 26, (bounds.size.h - 22) / 2, 22, 22);
+    graphics_context_set_stroke_color(ctx, GColorBlack);
+    graphics_draw_rect(ctx, cb);
+    if (on) {
+      graphics_draw_line(ctx, GPoint(cb.origin.x + 3,  cb.origin.y + 11),
+                               GPoint(cb.origin.x + 9,  cb.origin.y + 17));
+      graphics_draw_line(ctx, GPoint(cb.origin.x + 9,  cb.origin.y + 17),
+                               GPoint(cb.origin.x + 19, cb.origin.y + 5));
+    }
+  } else if (idx->row == ROW_REFRESH) {
     const char *label = s_refreshing ? "Refreshing\xe2\x80\xa6" : "Refresh Data";
     menu_cell_basic_draw(ctx, cell, label, NULL, NULL);
   } else {
@@ -66,7 +87,11 @@ static void prv_stations_ready(void) {
 }
 
 static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
-  if (idx->row == 0 && !s_refreshing) {
+  if (idx->row == ROW_SHOW_RECENT) {
+    state_set_show_recent(!state_get_show_recent());
+    if (s_menu) menu_layer_reload_data(s_menu);
+    win_home_reload();
+  } else if (idx->row == ROW_REFRESH && !s_refreshing) {
     APP_LOG(APP_LOG_LEVEL_INFO, "[settings] refresh requested, arming %dms watchdog", REFRESH_WATCHDOG_MS);
     s_refreshing = true;
     menu_layer_reload_data(s_menu);
@@ -74,7 +99,7 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
     comm_set_status_callback(prv_status);
     comm_request_refresh_stations();
     s_watchdog = app_timer_register(REFRESH_WATCHDOG_MS, prv_watchdog_fire, NULL);
-  } else if (idx->row == 1) {
+  } else if (idx->row == ROW_EDIT_FAVS) {
     win_edit_favorites_push();
   }
 }

@@ -312,6 +312,8 @@ static void prv_rte_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   }
   if (!any) return; // nothing selected — ignore
 
+  state_set_recent_search(s_rte_ctx->slug, routes);
+
   ArrivalsParams params;
   memset(&params, 0, sizeof(params));
   strncpy(params.station_slug, s_rte_ctx->slug, sizeof(params.station_slug) - 1);

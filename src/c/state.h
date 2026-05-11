@@ -66,6 +66,13 @@ typedef struct {
   char name[FAVORITE_NAME_LEN]; // user-visible nickname; "" falls back to slug_to_display
 } Favorite;
 
+// ─── Recent Search ───────────────────────────────────────────────────────────
+
+typedef struct {
+  char station_slug[40];
+  char routes[64]; // compact 2-char pairs: route + dir digit, e.g. "A0B1"
+} RecentSearch;
+
 // ─── Persistent storage key allocation ───────────────────────────────────────
 // Key 0       : STATIONS_VERSION (uint32)
 // Key 1       : STATIONS_BLOB_SIZE (uint32) — total byte length of assembled blob
@@ -73,6 +80,9 @@ typedef struct {
 // Key 100     : SCHEMA_VERSION (uint8) — bumped when Favorite binary layout changes
 // Key 200     : FAVORITES_COUNT (uint8)
 // Key 201..216: FAVORITE_i (one Favorite struct each)
+// Key 217     : RECENT_SEARCH (RecentSearch blob)
+// Key 218     : RECENT_DISMISSED (uint8: 0/1)
+// Key 219     : SHOW_RECENT (uint8: 0/1, default 1)
 
 #define PERSIST_KEY_STATIONS_VERSION    0
 #define PERSIST_KEY_STATIONS_BLOB_SIZE  1
@@ -80,6 +90,9 @@ typedef struct {
 #define PERSIST_KEY_SCHEMA_VERSION      100
 #define PERSIST_KEY_FAVORITES_COUNT     200
 #define PERSIST_KEY_FAVORITES_BASE      201 // keys 201..216
+#define PERSIST_KEY_RECENT_SEARCH       217
+#define PERSIST_KEY_RECENT_DISMISSED    218
+#define PERSIST_KEY_SHOW_RECENT         219
 
 #define SCHEMA_V_NAMES_DROPPED 1
 #define SCHEMA_V_USER_NAMES    2
@@ -110,6 +123,15 @@ void       state_set_favorite_name(uint8_t index, const char *name);
 ArrivalCache *state_get_arrival_cache(uint8_t index);
 void          state_set_arrival_cache(uint8_t index, const ArrivalCache *cache);
 void          state_clear_arrival_cache(uint8_t index);
+
+// Recent Search
+bool state_get_recent_search(RecentSearch *out); // false if absent/invalid
+void state_set_recent_search(const char *slug, const char *routes); // also clears dismissed
+void state_clear_recent_search(void);
+bool state_is_recent_dismissed(void);
+void state_set_recent_dismissed(bool dismissed);
+bool state_get_show_recent(void); // defaults true
+void state_set_show_recent(bool on);
 
 // Helpers
 const Station *state_find_station(const char *slug);

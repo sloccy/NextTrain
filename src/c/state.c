@@ -19,6 +19,11 @@ static uint8_t       s_favorite_count = 0;
 // MAX_FAVORITES slots + 1 transient slot (index 0xFF → mapped to slot MAX_FAVORITES)
 static ArrivalCache s_arrival_cache[MAX_FAVORITES + 1];
 
+static RecentSearch s_recent        = {{0},{0}};
+static bool         s_recent_valid      = false;
+static bool         s_recent_dismissed  = false;
+static bool         s_show_recent       = true;
+
 static inline uint8_t cache_idx(uint8_t index) {
   return (index == QUERY_INDEX_TRANSIENT) ? MAX_FAVORITES : index;
 }
@@ -51,6 +56,17 @@ void state_init(void) {
   for (uint8_t i = 0; i < s_favorite_count; i++) {
     persist_read_data(PERSIST_KEY_FAVORITES_BASE + i, &s_favorites[i], sizeof(Favorite));
   }
+
+  // Recent Search
+  if (persist_exists(PERSIST_KEY_RECENT_SEARCH) &&
+      persist_get_size(PERSIST_KEY_RECENT_SEARCH) == (int)sizeof(RecentSearch)) {
+    persist_read_data(PERSIST_KEY_RECENT_SEARCH, &s_recent, sizeof(RecentSearch));
+    s_recent_valid = (s_recent.station_slug[0] != '\0');
+  }
+  s_recent_dismissed = persist_exists(PERSIST_KEY_RECENT_DISMISSED) &&
+                       persist_read_int(PERSIST_KEY_RECENT_DISMISSED) != 0;
+  s_show_recent = !persist_exists(PERSIST_KEY_SHOW_RECENT) ||
+                  persist_read_int(PERSIST_KEY_SHOW_RECENT) != 0;
 }
 
 void state_deinit(void) {
@@ -362,6 +378,50 @@ void state_set_arrival_cache(uint8_t index, const ArrivalCache *cache) {
 
 void state_clear_arrival_cache(uint8_t index) {
   memset(&s_arrival_cache[cache_idx(index)], 0, sizeof(ArrivalCache));
+}
+
+// ─── Recent Search ───────────────────────────────────────────────────────────
+
+bool state_get_recent_search(RecentSearch *out) {
+  if (!s_recent_valid) return false;
+  if (out) *out = s_recent;
+  return true;
+}
+
+void state_set_recent_search(const char *slug, const char *routes) {
+  memset(&s_recent, 0, sizeof(s_recent));
+  strncpy(s_recent.station_slug, slug,   sizeof(s_recent.station_slug) - 1);
+  strncpy(s_recent.routes,       routes, sizeof(s_recent.routes)       - 1);
+  s_recent_valid     = true;
+  s_recent_dismissed = false;
+  persist_write_data(PERSIST_KEY_RECENT_SEARCH, &s_recent, sizeof(RecentSearch));
+  persist_write_int(PERSIST_KEY_RECENT_DISMISSED, 0);
+}
+
+void state_clear_recent_search(void) {
+  memset(&s_recent, 0, sizeof(s_recent));
+  s_recent_valid     = false;
+  s_recent_dismissed = false;
+  persist_delete(PERSIST_KEY_RECENT_SEARCH);
+  persist_delete(PERSIST_KEY_RECENT_DISMISSED);
+}
+
+bool state_is_recent_dismissed(void) {
+  return s_recent_dismissed;
+}
+
+void state_set_recent_dismissed(bool dismissed) {
+  s_recent_dismissed = dismissed;
+  persist_write_int(PERSIST_KEY_RECENT_DISMISSED, dismissed ? 1 : 0);
+}
+
+bool state_get_show_recent(void) {
+  return s_show_recent;
+}
+
+void state_set_show_recent(bool on) {
+  s_show_recent = on;
+  persist_write_int(PERSIST_KEY_SHOW_RECENT, on ? 1 : 0);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
