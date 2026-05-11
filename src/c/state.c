@@ -147,10 +147,10 @@ void state_persist_favorite_stations(void) {
 
   // Header: u32 generated_at + u16 station_count (count patched at end)
   uint32_t g = s_stations.generated_at;
-  buf[off++] = (g >> 24) & 0xFF;
-  buf[off++] = (g >> 16) & 0xFF;
-  buf[off++] = (g >>  8) & 0xFF;
   buf[off++] =  g        & 0xFF;
+  buf[off++] = (g >>  8) & 0xFF;
+  buf[off++] = (g >> 16) & 0xFF;
+  buf[off++] = (g >> 24) & 0xFF;
   uint32_t count_off = off;
   buf[off++] = 0; buf[off++] = 0;
 
@@ -208,8 +208,8 @@ void state_persist_favorite_stations(void) {
     count++;
   }
 
-  buf[count_off    ] = (count >> 8) & 0xFF;
-  buf[count_off + 1] =  count       & 0xFF;
+  buf[count_off    ] =  count       & 0xFF;
+  buf[count_off + 1] = (count >> 8) & 0xFF;
 
   // Persist: clear version first so a partial write isn't readable on next boot
   persist_write_int(PERSIST_KEY_STATIONS_VERSION, 0);
