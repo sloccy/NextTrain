@@ -465,14 +465,16 @@ static void prv_handle_alert_detail(DictionaryIterator *iter) {
   uint8_t alert_count, i, hl, hcopy, dl, dcopy;
   AlertEntry *e;
 
-  AlertDetailCache cache;
-  memset(&cache, 0, sizeof(cache));
-  cache.valid = true;
+  // Parse directly into global — AlertDetailCache is ~1.9KB; putting it on the
+  // stack blows the Pebble app stack and crashes with PC:0 LR:0.
+  AlertDetailCache *cache = state_get_alert_detail();
+  memset(cache, 0, sizeof(*cache));
+  cache->valid = true;
 
   if (p >= end) goto det_done;
   alert_count = *p++;
-  for (i = 0; i < alert_count && cache.count < MAX_ALERTS_PER_ROUTE; i++) {
-    e = &cache.entries[cache.count];
+  for (i = 0; i < alert_count && cache->count < MAX_ALERTS_PER_ROUTE; i++) {
+    e = &cache->entries[cache->count];
     if (p >= end) break;
     hl = *p++;
     if (p + hl > end) break;
@@ -485,15 +487,14 @@ static void prv_handle_alert_detail(DictionaryIterator *iter) {
     dcopy = dl < sizeof(e->desc) - 1 ? dl : (uint8_t)(sizeof(e->desc) - 1);
     memcpy(e->desc, p, dcopy); e->desc[dcopy] = 0;
     p += dl;
-    cache.count++;
+    cache->count++;
   }
 
 det_done:
-  strncpy(cache.route, s_pending_alert_route, sizeof(cache.route) - 1);
-  cache.route[sizeof(cache.route) - 1] = 0;
-  state_set_alert_detail(&cache);
-  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] alert_detail: %d alerts", (int)cache.count);
-  if (s_al_det_cb) s_al_det_cb(&cache);
+  strncpy(cache->route, s_pending_alert_route, sizeof(cache->route) - 1);
+  cache->route[sizeof(cache->route) - 1] = 0;
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] alert_detail: %d alerts", (int)cache->count);
+  if (s_al_det_cb) s_al_det_cb(cache);
 }
 
 // ─── Arrivals payload parser ──────────────────────────────────────────────────

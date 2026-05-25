@@ -2,10 +2,14 @@
 #include "win_alert_detail.h"
 #include "state.h"
 #include "comm.h"
+#include "ui.h"
 #include <string.h>
 #include <stdio.h>
 
-#define ROW_HEIGHT 44
+#define ROW_HEIGHT 36
+#define ICON_SIZE  24
+#define ICON_X      4
+#define TEXT_X     34
 
 static Window    *s_window;
 static MenuLayer *s_menu;
@@ -57,9 +61,19 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   }
 
   const AlertRouteSummary *r = &cache->routes[idx->row];
-  char sub[20];
-  snprintf(sub, sizeof(sub), "%u alert%s", (unsigned)r->count, r->count == 1 ? "" : "s");
-  menu_cell_basic_draw(ctx, cell, r->name, sub, NULL);
+
+  uint8_t rr = 100, gg = 100, bb = 100;
+  state_find_route_color(r->name, &rr, &gg, &bb);
+  GRect icon_r = GRect(ICON_X, (bounds.size.h - ICON_SIZE) / 2, ICON_SIZE, ICON_SIZE);
+  ui_draw_route_icon(ctx, icon_r, r->name[0], ui_gcolor_from_rgb(rr, gg, bb));
+
+  char label[24];
+  snprintf(label, sizeof(label), "%u alert%s", (unsigned)r->count, r->count == 1 ? "" : "s");
+  int16_t font_h = 20;
+  GRect text_r = GRect(TEXT_X, (bounds.size.h - font_h) / 2, bounds.size.w - TEXT_X - 4, font_h);
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, label, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                     text_r, GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
 static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {

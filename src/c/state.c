@@ -453,6 +453,22 @@ const Station *state_find_station(const char *slug) {
   return NULL;
 }
 
+bool state_find_route_color(const char *route_name, uint8_t *r, uint8_t *g, uint8_t *b) {
+  if (!s_stations.valid) return false;
+  for (uint16_t i = 0; i < s_stations.station_count; i++) {
+    const Station *st = &s_stations.stations[i];
+    for (uint8_t j = 0; j < st->route_count; j++) {
+      if (strcmp(st->routes[j].route, route_name) == 0) {
+        *r = st->routes[j].r;
+        *g = st->routes[j].g;
+        *b = st->routes[j].b;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 void state_format_routes_query(const Favorite *fav, char *buf, size_t buf_size) {
   if (!fav || buf_size == 0) return;
   buf[0] = '\0';

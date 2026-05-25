@@ -172,6 +172,7 @@ void               state_set_alert_detail(const AlertDetailCache *cache);
 
 // Helpers
 const Station *state_find_station(const char *slug);
+bool state_find_route_color(const char *route_name, uint8_t *r, uint8_t *g, uint8_t *b);
 
 // Encode Favorite routes as a comma-separated "route:dir" query string (e.g. "A:N,B:E")
 void state_format_routes_query(const Favorite *fav, char *buf, size_t buf_size);
