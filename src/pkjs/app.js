@@ -329,8 +329,13 @@ function handleGetAlertDetail(routeName) {
         payload.push(hb.length);
         for (var j = 0; j < hb.length; j++) payload.push(hb[j]);
 
+        var descTrunc = desc;
+        if (desc.length > 160) {
+          var cut = desc.lastIndexOf(' ', 159);
+          descTrunc = desc.slice(0, cut > 0 ? cut : 160);
+        }
         var db = [];
-        for (var j = 0; j < Math.min(desc.length, 160); j++) db.push(desc.charCodeAt(j) & 0xFF);
+        for (var j = 0; j < descTrunc.length; j++) db.push(descTrunc.charCodeAt(j) & 0xFF);
         payload.push(db.length);
         for (var j = 0; j < db.length; j++) payload.push(db[j]);
       }
