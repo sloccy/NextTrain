@@ -105,6 +105,7 @@ static void prv_window_unload(Window *win) {
 // ─── Public ───────────────────────────────────────────────────────────────────
 
 void win_alert_detail_push(const char *route_name) {
+  if (s_window) return;
   strncpy(s_route, route_name, sizeof(s_route) - 1);
   s_route[sizeof(s_route) - 1] = 0;
 

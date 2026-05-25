@@ -65,6 +65,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
 static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
   const AlertSummaryCache *cache = state_get_alert_summary();
   if (!cache->valid || cache->count == 0 || s_waiting) return;
+  if (idx->row >= cache->count) return;
   win_alert_detail_push(cache->routes[idx->row].name);
 }
 

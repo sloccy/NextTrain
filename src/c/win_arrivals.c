@@ -200,7 +200,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   bool   status_bold;
   format_status_label(e->st, status_buf, sizeof(status_buf), &status_color, &status_bold);
 
-  char status_line[48];
+  char status_line[64];
   if (e->at_stop[0]) {
     char at_disp[36];
     slug_to_display(e->at_stop, at_disp, sizeof(at_disp));
@@ -229,7 +229,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
                      GTextOverflowModeFill, GTextAlignmentRight, NULL);
 
   char cd_buf[10];
-  uint16_t pred = format_arrival_predicted_min(e->mins, e->st);
+  uint16_t pred = e->mins;
   format_countdown(pred, cd_buf, sizeof(cd_buf));
 
   graphics_draw_text(ctx, cd_buf,

@@ -237,8 +237,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
     char sub[32];
     if (cache && cache->valid && cache->count > 0) {
       char wall[10], cd[10];
-      uint16_t pred = format_arrival_predicted_min(cache->entries[0].mins,
-                                                   cache->entries[0].st);
+      uint16_t pred = cache->entries[0].mins;
       format_wall_time(cache->entries[0].mins, wall, sizeof(wall));
       format_countdown(pred, cd, sizeof(cd));
       snprintf(sub, sizeof(sub), "Next: %s \xc2\xb7 %s", wall, cd);

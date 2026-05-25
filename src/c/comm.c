@@ -543,9 +543,8 @@ static void prv_parse_arrivals_payload(ArrivalCache *cache,
     if (p < end) {
       uint8_t asl = *p++;
       uint8_t ac = asl < sizeof(e->at_stop) - 1 ? asl : (uint8_t)(sizeof(e->at_stop) - 1);
-      if (p + asl <= end) { memcpy(e->at_stop, p, ac); e->at_stop[ac] = 0; }
+      if (p + asl <= end) { memcpy(e->at_stop, p, ac); e->at_stop[ac] = 0; p += asl; }
       else { e->at_stop[0] = 0; }
-      p += asl;
     } else {
       e->at_stop[0] = 0;
     }
