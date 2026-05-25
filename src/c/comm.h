@@ -9,6 +9,8 @@ typedef void (*ArrivalReceivedCb)(uint8_t query_index, const ArrivalCache *cache
 typedef void (*StationsReadyCb)(void);
 typedef void (*StatusReceivedCb)(uint8_t query_index, CommStatus status);
 typedef void (*FavoriteRenamedCb)(void);
+typedef void (*AlertSummaryReceivedCb)(const AlertSummaryCache *cache);
+typedef void (*AlertDetailReceivedCb)(const AlertDetailCache *cache);
 
 void comm_init(uint32_t inbox_size);
 void comm_deinit(void);
@@ -17,6 +19,8 @@ void comm_set_arrivals_callback(ArrivalReceivedCb cb);
 void comm_set_stations_ready_callback(StationsReadyCb cb);
 void comm_set_status_callback(StatusReceivedCb cb);
 void comm_set_favorite_renamed_callback(FavoriteRenamedCb cb);
+void comm_set_alert_summary_callback(AlertSummaryReceivedCb cb);
+void comm_set_alert_detail_callback(AlertDetailReceivedCb cb);
 
 // Outbound operations — all are queued and serialized through the AppMessage outbox.
 // Stations sync takes priority over arrivals requests.
@@ -24,6 +28,8 @@ void comm_request_stations_version(void);
 void comm_request_stations_full(void);
 void comm_request_arrivals(uint8_t query_index, const char *station_slug, const char *routes);
 void comm_request_refresh_stations(void);
+void comm_request_alerts_summary(void);
+void comm_request_alert_detail(const char *route_name);
 
 // Called by main.c's inbox_received handler to route incoming messages.
 void comm_inbox_received(DictionaryIterator *iter);

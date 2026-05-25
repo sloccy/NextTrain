@@ -45,6 +45,7 @@ typedef struct {
   char          headsign[25];
   uint16_t      mins;  // backend minute-of-day (0..1439)
   int8_t        st;    // status sentinel/delta; see format_status_label()
+  char          at_stop[32]; // station slug of current vehicle, or ""
 } ArrivalEntry;
 
 typedef struct {
@@ -53,6 +54,36 @@ typedef struct {
   ArrivalEntry entries[MAX_ARRIVALS];
   uint32_t     next_refresh;
 } ArrivalCache;
+
+// ─── Alerts cache ────────────────────────────────────────────────────────────
+
+#define MAX_ALERT_ROUTES     16
+#define MAX_ALERTS_PER_ROUTE  8
+#define ALERT_HEADER_LEN     80
+#define ALERT_DESC_LEN      160
+
+typedef struct {
+  char    name[4];
+  uint8_t count;
+} AlertRouteSummary;
+
+typedef struct {
+  bool             valid;
+  uint8_t          count;
+  AlertRouteSummary routes[MAX_ALERT_ROUTES];
+} AlertSummaryCache;
+
+typedef struct {
+  char header[ALERT_HEADER_LEN];
+  char desc[ALERT_DESC_LEN];
+} AlertEntry;
+
+typedef struct {
+  bool       valid;
+  char       route[4];
+  uint8_t    count;
+  AlertEntry entries[MAX_ALERTS_PER_ROUTE];
+} AlertDetailCache;
 
 // ─── Favorites ───────────────────────────────────────────────────────────────
 
@@ -132,6 +163,12 @@ bool state_is_recent_dismissed(void);
 void state_set_recent_dismissed(bool dismissed);
 bool state_get_show_recent(void); // defaults true
 void state_set_show_recent(bool on);
+
+// Alerts cache
+AlertSummaryCache *state_get_alert_summary(void);
+void               state_set_alert_summary(const AlertSummaryCache *cache);
+AlertDetailCache  *state_get_alert_detail(void);
+void               state_set_alert_detail(const AlertDetailCache *cache);
 
 // Helpers
 const Station *state_find_station(const char *slug);

@@ -31,10 +31,13 @@ static uint16_t s_recv_chunks  = 0;
 
 // ─── Callbacks ───────────────────────────────────────────────────────────────
 
-static ArrivalReceivedCb s_arr_cb       = NULL;
-static StationsReadyCb   s_sta_cb       = NULL;
-static StatusReceivedCb  s_status_cb    = NULL;
-static FavoriteRenamedCb s_fav_cb       = NULL;
+static ArrivalReceivedCb       s_arr_cb       = NULL;
+static StationsReadyCb         s_sta_cb       = NULL;
+static StatusReceivedCb        s_status_cb    = NULL;
+static FavoriteRenamedCb       s_fav_cb       = NULL;
+static AlertSummaryReceivedCb  s_al_sum_cb    = NULL;
+static AlertDetailReceivedCb   s_al_det_cb    = NULL;
+static char                    s_pending_alert_route[4] = {0};
 
 // ─── Forward declarations ─────────────────────────────────────────────────────
 
@@ -45,6 +48,8 @@ static void prv_handle_arrivals(DictionaryIterator *iter);
 static void prv_handle_status(DictionaryIterator *iter);
 static void prv_handle_favorites_request(void);
 static void prv_handle_rename_favorite(DictionaryIterator *iter);
+static void prv_handle_alerts_summary(DictionaryIterator *iter);
+static void prv_handle_alert_detail(DictionaryIterator *iter);
 static void prv_parse_arrivals_payload(ArrivalCache *cache,
                                         const uint8_t *data, size_t len,
                                         uint32_t next_refresh);
@@ -68,6 +73,8 @@ void comm_set_arrivals_callback(ArrivalReceivedCb cb)       { s_arr_cb    = cb; 
 void comm_set_stations_ready_callback(StationsReadyCb cb)   { s_sta_cb    = cb; }
 void comm_set_status_callback(StatusReceivedCb cb)          { s_status_cb = cb; }
 void comm_set_favorite_renamed_callback(FavoriteRenamedCb cb) { s_fav_cb  = cb; }
+void comm_set_alert_summary_callback(AlertSummaryReceivedCb cb) { s_al_sum_cb = cb; }
+void comm_set_alert_detail_callback(AlertDetailReceivedCb cb)   { s_al_det_cb = cb; }
 
 // ─── Enqueue helpers ──────────────────────────────────────────────────────────
 
@@ -164,6 +171,16 @@ void comm_request_refresh_stations(void) {
   prv_enqueue(OP_REFRESH_STATIONS, 0, NULL, NULL);
 }
 
+void comm_request_alerts_summary(void) {
+  prv_enqueue(OP_GET_ALERTS_SUMMARY, 0, NULL, NULL);
+}
+
+void comm_request_alert_detail(const char *route_name) {
+  strncpy(s_pending_alert_route, route_name, sizeof(s_pending_alert_route) - 1);
+  s_pending_alert_route[sizeof(s_pending_alert_route) - 1] = 0;
+  prv_enqueue(OP_GET_ALERT_DETAIL, 0, NULL, route_name);
+}
+
 // ─── Outbox callbacks ─────────────────────────────────────────────────────────
 
 void comm_outbox_sent(DictionaryIterator *iter) {
@@ -196,6 +213,8 @@ void comm_inbox_received(DictionaryIterator *iter) {
       case DATA_TYPE_STATIONS_VERSION:  prv_handle_stations_version(iter); return;
       case DATA_TYPE_STATIONS_CHUNK:    prv_handle_stations_chunk(iter);   return;
       case DATA_TYPE_ARRIVALS:          prv_handle_arrivals(iter);         return;
+      case DATA_TYPE_ALERTS_SUMMARY:    prv_handle_alerts_summary(iter);   return;
+      case DATA_TYPE_ALERT_DETAIL:      prv_handle_alert_detail(iter);     return;
       case DATA_TYPE_FAVORITES_REQUEST: prv_handle_favorites_request();    return;
       case DATA_TYPE_RENAME_FAVORITE:   prv_handle_rename_favorite(iter);  return;
       default:
@@ -403,6 +422,80 @@ static void prv_handle_rename_favorite(DictionaryIterator *iter) {
   if (s_fav_cb) s_fav_cb();
 }
 
+// ─── Alerts handlers ─────────────────────────────────────────────────────────
+
+static void prv_handle_alerts_summary(DictionaryIterator *iter) {
+  Tuple *pl = dict_find(iter, MESSAGE_KEY_PAYLOAD);
+  if (!pl) return;
+  const uint8_t *p   = pl->value->data;
+  const uint8_t *end = p + pl->length;
+  uint8_t route_count, i, nlen, copy;
+
+  AlertSummaryCache cache;
+  memset(&cache, 0, sizeof(cache));
+  cache.valid = true;
+
+  if (p >= end) goto sum_done;
+  route_count = *p++;
+  for (i = 0; i < route_count && cache.count < MAX_ALERT_ROUTES; i++) {
+    if (p >= end) break;
+    nlen = *p++;
+    if (p + nlen > end) break;
+    copy = nlen < sizeof(cache.routes[cache.count].name) - 1
+         ? nlen : (uint8_t)(sizeof(cache.routes[cache.count].name) - 1);
+    memcpy(cache.routes[cache.count].name, p, copy);
+    cache.routes[cache.count].name[copy] = 0;
+    p += nlen;
+    if (p >= end) break;
+    cache.routes[cache.count].count = *p++;
+    cache.count++;
+  }
+
+sum_done:
+  state_set_alert_summary(&cache);
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] alerts_summary: %d routes", (int)cache.count);
+  if (s_al_sum_cb) s_al_sum_cb(&cache);
+}
+
+static void prv_handle_alert_detail(DictionaryIterator *iter) {
+  Tuple *pl = dict_find(iter, MESSAGE_KEY_PAYLOAD);
+  if (!pl) return;
+  const uint8_t *p   = pl->value->data;
+  const uint8_t *end = p + pl->length;
+  uint8_t alert_count, i, hl, hcopy, dl, dcopy;
+  AlertEntry *e;
+
+  AlertDetailCache cache;
+  memset(&cache, 0, sizeof(cache));
+  cache.valid = true;
+
+  if (p >= end) goto det_done;
+  alert_count = *p++;
+  for (i = 0; i < alert_count && cache.count < MAX_ALERTS_PER_ROUTE; i++) {
+    e = &cache.entries[cache.count];
+    if (p >= end) break;
+    hl = *p++;
+    if (p + hl > end) break;
+    hcopy = hl < sizeof(e->header) - 1 ? hl : (uint8_t)(sizeof(e->header) - 1);
+    memcpy(e->header, p, hcopy); e->header[hcopy] = 0;
+    p += hl;
+    if (p >= end) break;
+    dl = *p++;
+    if (p + dl > end) break;
+    dcopy = dl < sizeof(e->desc) - 1 ? dl : (uint8_t)(sizeof(e->desc) - 1);
+    memcpy(e->desc, p, dcopy); e->desc[dcopy] = 0;
+    p += dl;
+    cache.count++;
+  }
+
+det_done:
+  strncpy(cache.route, s_pending_alert_route, sizeof(cache.route) - 1);
+  cache.route[sizeof(cache.route) - 1] = 0;
+  state_set_alert_detail(&cache);
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] alert_detail: %d alerts", (int)cache.count);
+  if (s_al_det_cb) s_al_det_cb(&cache);
+}
+
 // ─── Arrivals payload parser ──────────────────────────────────────────────────
 
 static void prv_parse_arrivals_payload(ArrivalCache *cache,
@@ -445,6 +538,17 @@ static void prv_parse_arrivals_payload(ArrivalCache *cache,
     e->mins = ((uint16_t)p[0] << 8) | p[1];
     e->st   = (int8_t)p[2];
     p += 3;
+
+    // at_stop: u8 len + bytes
+    if (p < end) {
+      uint8_t asl = *p++;
+      uint8_t ac = asl < sizeof(e->at_stop) - 1 ? asl : (uint8_t)(sizeof(e->at_stop) - 1);
+      if (p + asl <= end) { memcpy(e->at_stop, p, ac); e->at_stop[ac] = 0; }
+      else { e->at_stop[0] = 0; }
+      p += asl;
+    } else {
+      e->at_stop[0] = 0;
+    }
 
     #undef LP
     cache->count++;

@@ -200,8 +200,18 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   bool   status_bold;
   format_status_label(e->st, status_buf, sizeof(status_buf), &status_color, &status_bold);
 
+  char status_line[48];
+  if (e->at_stop[0]) {
+    char at_disp[36];
+    slug_to_display(e->at_stop, at_disp, sizeof(at_disp));
+    snprintf(status_line, sizeof(status_line), "%s \xe2\x80\x94 At %s", status_buf, at_disp);
+  } else {
+    strncpy(status_line, status_buf, sizeof(status_line) - 1);
+    status_line[sizeof(status_line) - 1] = 0;
+  }
+
   graphics_context_set_text_color(ctx, status_color);
-  graphics_draw_text(ctx, status_buf,
+  graphics_draw_text(ctx, status_line,
                      fonts_get_system_font(status_bold
                                            ? FONT_KEY_GOTHIC_14_BOLD
                                            : FONT_KEY_GOTHIC_14),

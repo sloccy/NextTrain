@@ -24,6 +24,9 @@ static bool         s_recent_valid      = false;
 static bool         s_recent_dismissed  = false;
 static bool         s_show_recent       = true;
 
+static AlertSummaryCache s_alert_summary = {0};
+static AlertDetailCache  s_alert_detail  = {0};
+
 static inline uint8_t cache_idx(uint8_t index) {
   return (index == QUERY_INDEX_TRANSIENT) ? MAX_FAVORITES : index;
 }
@@ -424,6 +427,20 @@ void state_set_show_recent(bool on) {
   persist_write_int(PERSIST_KEY_SHOW_RECENT, on ? 1 : 0);
 }
 
+// ─── Alerts cache ─────────────────────────────────────────────────────────────
+
+AlertSummaryCache *state_get_alert_summary(void) { return &s_alert_summary; }
+
+void state_set_alert_summary(const AlertSummaryCache *cache) {
+  s_alert_summary = *cache;
+}
+
+AlertDetailCache *state_get_alert_detail(void) { return &s_alert_detail; }
+
+void state_set_alert_detail(const AlertDetailCache *cache) {
+  s_alert_detail = *cache;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const Station *state_find_station(const char *slug) {
@@ -469,7 +486,7 @@ void slug_to_display(const char *slug, char *out, size_t n) {
   bool word_start = true;
   for (size_t i = 0; slug[i] && o + 1 < n; i++) {
     char c = slug[i];
-    if (c == '_') { out[o++] = ' '; word_start = true; continue; }
+    if (c == '_' || c == '-') { out[o++] = ' '; word_start = true; continue; }
     if (word_start && c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
     out[o++] = c;
     word_start = false;

@@ -5,8 +5,10 @@ var stationsModule = require('./stations');
 var WORKER_BASE = 'https://nt.sloccy.workers.dev';
 
 var OP = { GET_STATIONS_VERSION: 1, GET_STATIONS_FULL: 2,
-           GET_ARRIVALS: 3, REFRESH_STATIONS: 4 };
+           GET_ARRIVALS: 3, REFRESH_STATIONS: 4,
+           GET_ALERTS_SUMMARY: 5, GET_ALERT_DETAIL: 6 };
 var DATA_TYPE = { STATIONS_VERSION: 1, STATIONS_CHUNK: 2, ARRIVALS: 3,
+                  ALERTS_SUMMARY: 4, ALERT_DETAIL: 5,
                   FAVORITES_REQUEST: 6, FAVORITES_LIST: 7, RENAME_FAVORITE: 8 };
 var STATUS    = { OK: 0, OFFLINE: 1, NO_DATA: 2, ERROR: 3 };
 
@@ -212,6 +214,10 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
           var mins = (resBin[pos++] << 8) | resBin[pos++];
           var status = new Int8Array([resBin[pos++]])[0];
 
+          var atStopLen = resBin[pos++];
+          var atStop = '';
+          for (var j = 0; j < atStopLen; j++) atStop += String.fromCharCode(resBin[pos++]);
+
           var static_ = lookup[route + '.' + dir] || { r: 128, g: 128, b: 128, h: '' };
 
           finalBuf.push(static_.r, static_.g, static_.b);
@@ -219,6 +225,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
           lpStrWatch(finalBuf, static_.h, 24);
           finalBuf.push((mins >> 8) & 0xFF, mins & 0xFF);
           finalBuf.push(status & 0xFF);
+          lpStrWatch(finalBuf, atStop, 32);
         }
 
         sendDict({
@@ -234,6 +241,106 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
       console.log('[pkjs] arrivals XHR GET ' + url);
       xhr.send();
     });
+  });
+}
+
+// ─── Alerts summary ───────────────────────────────────────────────────────────
+
+function handleGetAlertsSummary() {
+  console.log('[pkjs] handleGetAlertsSummary');
+  enqueue(function() {
+    var url = WORKER_BASE + '/al';
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'arraybuffer';
+    xhr.timeout = 8000;
+
+    xhr.onload = function() {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        sendStatus(0, STATUS.ERROR); drain(); return;
+      }
+      var bin = new Uint8Array(xhr.response);
+      var pos = 0;
+      var routeCount = bin[pos++];
+      var payload = [];
+      var filteredCount = 0;
+
+      for (var i = 0; i < routeCount; i++) {
+        var nlen = bin[pos++];
+        var name = '';
+        for (var j = 0; j < nlen; j++) name += String.fromCharCode(bin[pos++]);
+        var cnt = bin[pos++];
+        if (cnt > 0) {
+          payload.push(nlen);
+          for (var k = 0; k < nlen; k++) payload.push(name.charCodeAt(k) & 0xFF);
+          payload.push(cnt);
+          filteredCount++;
+        }
+      }
+
+      payload.unshift(filteredCount);
+      sendDict({ DATA_TYPE: DATA_TYPE.ALERTS_SUMMARY, PAYLOAD: payload }, drain);
+    };
+    xhr.onerror   = function() { sendStatus(0, STATUS.OFFLINE); drain(); };
+    xhr.ontimeout = function() { sendStatus(0, STATUS.OFFLINE); drain(); };
+    console.log('[pkjs] alerts summary XHR GET ' + url);
+    xhr.send();
+  });
+}
+
+// ─── Alert detail ─────────────────────────────────────────────────────────────
+
+function handleGetAlertDetail(routeName) {
+  console.log('[pkjs] handleGetAlertDetail route=' + routeName);
+  enqueue(function() {
+    var url = WORKER_BASE + '/al?r=' + encodeURIComponent(routeName);
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'arraybuffer';
+    xhr.timeout = 8000;
+
+    xhr.onload = function() {
+      if (xhr.status === 404) {
+        sendDict({ DATA_TYPE: DATA_TYPE.ALERT_DETAIL, PAYLOAD: [0] }, drain); return;
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        sendStatus(0, STATUS.ERROR); drain(); return;
+      }
+      var bin = new Uint8Array(xhr.response);
+      var pos = 0;
+      var alertCount = bin[pos++];
+      var payload = [Math.min(alertCount, 8)];
+
+      for (var i = 0; i < alertCount && i < 8; i++) {
+        pos += 8; // active_from u32 + active_until u32
+        pos += 2; // cause u8 + effect u8
+
+        var hlen = bin[pos++];
+        var header = '';
+        for (var j = 0; j < hlen; j++) header += String.fromCharCode(bin[pos++]);
+
+        var dlen = bin[pos++] | (bin[pos++] << 8);
+        var desc = '';
+        for (var j = 0; j < dlen; j++) desc += String.fromCharCode(bin[pos++]);
+
+        // Truncate and encode as lpStr (u8 len + bytes)
+        var hb = [];
+        for (var j = 0; j < Math.min(header.length, 80); j++) hb.push(header.charCodeAt(j) & 0xFF);
+        payload.push(hb.length);
+        for (var j = 0; j < hb.length; j++) payload.push(hb[j]);
+
+        var db = [];
+        for (var j = 0; j < Math.min(desc.length, 160); j++) db.push(desc.charCodeAt(j) & 0xFF);
+        payload.push(db.length);
+        for (var j = 0; j < db.length; j++) payload.push(db[j]);
+      }
+
+      sendDict({ DATA_TYPE: DATA_TYPE.ALERT_DETAIL, PAYLOAD: payload }, drain);
+    };
+    xhr.onerror   = function() { sendStatus(0, STATUS.OFFLINE); drain(); };
+    xhr.ontimeout = function() { sendStatus(0, STATUS.OFFLINE); drain(); };
+    console.log('[pkjs] alert detail XHR GET ' + url);
+    xhr.send();
   });
 }
 
@@ -294,10 +401,12 @@ Pebble.addEventListener('appmessage', function(e) {
   console.log('[pkjs] op=' + op + ' idx=' + queryIndex + ' sta=' + stationSlug);
 
   switch (op) {
-    case OP.GET_STATIONS_VERSION: handleGetStationsVersion();                          break;
-    case OP.GET_STATIONS_FULL:    handleGetStationsFull(e.payload.INBOX_SIZE || 0);   break;
+    case OP.GET_STATIONS_VERSION: handleGetStationsVersion();                             break;
+    case OP.GET_STATIONS_FULL:    handleGetStationsFull(e.payload.INBOX_SIZE || 0);      break;
     case OP.GET_ARRIVALS:         handleGetArrivals(queryIndex, stationSlug, routesStr); break;
-    case OP.REFRESH_STATIONS:     handleRefreshStations();                             break;
+    case OP.REFRESH_STATIONS:     handleRefreshStations();                                break;
+    case OP.GET_ALERTS_SUMMARY:   handleGetAlertsSummary();                               break;
+    case OP.GET_ALERT_DETAIL:     handleGetAlertDetail(routesStr);                        break;
     default: console.warn('[pkjs] unknown op: ' + op);
   }
 });

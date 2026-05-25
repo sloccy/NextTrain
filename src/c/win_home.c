@@ -1,6 +1,7 @@
 #include "win_home.h"
 #include "win_picker.h"
 #include "win_arrivals.h"
+#include "win_alerts.h"
 #include "win_settings.h"
 #include "state.h"
 #include "comm.h"
@@ -108,7 +109,7 @@ static uint16_t prv_num_rows(MenuLayer *ml, uint16_t section, void *ctx) {
       return n > 0 ? n : 1; // 1 = empty-state placeholder
     }
     case KIND_RECENT:  return 1;
-    case KIND_ACTIONS: return 2; // "New Search", "Settings"
+    case KIND_ACTIONS: return 3; // "Alerts", "New Search", "Settings"
   }
   return 0;
 }
@@ -252,8 +253,8 @@ static void prv_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, void 
   }
 
   // Action rows
-  const char *labels[] = {"+ New Search", "Settings"};
-  if (idx->row < 2) {
+  const char *labels[] = {"Alerts", "+ New Search", "Settings"};
+  if (idx->row < 3) {
     menu_cell_basic_draw(ctx, cell, labels[idx->row], NULL, NULL);
   }
 }
@@ -283,8 +284,9 @@ static void prv_select(MenuLayer *ml, MenuIndex *idx, void *ctx) {
       break;
     }
     case KIND_ACTIONS:
-      if (idx->row == 0) win_station_picker_push();
-      else               win_settings_push();
+      if (idx->row == 0)      win_alerts_push();
+      else if (idx->row == 1) win_station_picker_push();
+      else                    win_settings_push();
       break;
   }
 }

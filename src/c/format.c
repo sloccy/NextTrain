@@ -66,7 +66,7 @@ void format_status_label(int8_t st, char *buf, size_t n,
     *out_bold  = false;
   } else if (st > 0) {
     snprintf(buf, n, "+%d MIN", (int)st);
-    *out_color = GColorRed;
+    *out_color = GColorOrange;
   } else {
     snprintf(buf, n, "-%d MIN", (int)(-st));
     *out_color = GColorIslamicGreen;

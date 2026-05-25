@@ -11,6 +11,8 @@ typedef enum {
   OP_GET_STATIONS_FULL    = 2,
   OP_GET_ARRIVALS         = 3,
   OP_REFRESH_STATIONS     = 4,
+  OP_GET_ALERTS_SUMMARY   = 5,
+  OP_GET_ALERT_DETAIL     = 6,
 } OpCode;
 
 // MSG_DATA_TYPE values (phone → watch)
@@ -18,6 +20,8 @@ typedef enum {
   DATA_TYPE_STATIONS_VERSION   = 1,
   DATA_TYPE_STATIONS_CHUNK     = 2,
   DATA_TYPE_ARRIVALS           = 3,
+  DATA_TYPE_ALERTS_SUMMARY     = 4,
+  DATA_TYPE_ALERT_DETAIL       = 5,
   DATA_TYPE_FAVORITES_REQUEST  = 6, // phone → watch: request favorites list for config
   DATA_TYPE_FAVORITES_LIST     = 7, // watch → phone: JSON array of current favorites
   DATA_TYPE_RENAME_FAVORITE    = 8, // phone → watch: rename a specific favorite
