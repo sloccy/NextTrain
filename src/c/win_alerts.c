@@ -7,9 +7,9 @@
 #include <stdio.h>
 
 #define ROW_HEIGHT 36
-#define ICON_SIZE  24
+#define ICON_SIZE  28
 #define ICON_X      4
-#define TEXT_X     34
+#define TEXT_X     36
 
 static Window    *s_window;
 static MenuLayer *s_menu;
