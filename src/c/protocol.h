@@ -25,6 +25,7 @@ typedef enum {
   DATA_TYPE_FAVORITES_REQUEST  = 6, // phone → watch: request favorites list for config
   DATA_TYPE_FAVORITES_LIST     = 7, // watch → phone: JSON array of current favorites
   DATA_TYPE_RENAME_FAVORITE    = 8, // phone → watch: rename a specific favorite
+  DATA_TYPE_ALERT_DETAIL_CHUNK = 9, // phone → watch: chunked alert detail payload
 } DataType;
 
 // MSG_STATUS values (phone → watch)

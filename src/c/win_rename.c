@@ -5,7 +5,6 @@
 static DictationSession *s_session = NULL;
 static uint8_t           s_index;
 static RenameCompleteCb  s_cb;
-static char              s_buffer[64];
 
 static void prv_handler(DictationSession *session, DictationSessionStatus status,
                         char *transcription, void *context) {
@@ -27,7 +26,7 @@ void win_rename_start(uint8_t favorite_index, RenameCompleteCb cb) {
   }
   s_index = favorite_index;
   s_cb    = cb;
-  s_session = dictation_session_create(sizeof(s_buffer), prv_handler, NULL);
+  s_session = dictation_session_create(FAVORITE_NAME_LEN, prv_handler, NULL);
   if (s_session) {
     dictation_session_start(s_session);
   } else if (cb) {

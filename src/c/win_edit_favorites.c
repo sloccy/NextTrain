@@ -176,6 +176,7 @@ static void prv_window_load(Window *win) {
 static void prv_window_unload(Window *win) {
   menu_layer_destroy(s_menu); s_menu = NULL;
   layer_destroy(s_header_layer); s_header_layer = NULL;
+  window_destroy(win);
   s_window = NULL;
 }
 

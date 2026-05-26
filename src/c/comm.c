@@ -29,6 +29,13 @@ static uint32_t s_blob_used  = 0;
 static uint16_t s_total_chunks = 0;
 static uint16_t s_recv_chunks  = 0;
 
+// ─── Alert detail assembly ────────────────────────────────────────────────────
+
+static uint8_t  *s_al_blob         = NULL;
+static uint32_t  s_al_blob_used    = 0;
+static uint16_t  s_al_total_chunks = 0;
+static uint16_t  s_al_recv_chunks  = 0;
+
 // ─── Callbacks ───────────────────────────────────────────────────────────────
 
 static ArrivalReceivedCb       s_arr_cb       = NULL;
@@ -49,7 +56,8 @@ static void prv_handle_status(DictionaryIterator *iter);
 static void prv_handle_favorites_request(void);
 static void prv_handle_rename_favorite(DictionaryIterator *iter);
 static void prv_handle_alerts_summary(DictionaryIterator *iter);
-static void prv_handle_alert_detail(DictionaryIterator *iter);
+static void prv_parse_alert_detail(const uint8_t *data, size_t len);
+static void prv_handle_alert_detail_chunk(DictionaryIterator *iter);
 static void prv_parse_arrivals_payload(ArrivalCache *cache,
                                         const uint8_t *data, size_t len,
                                         uint32_t next_refresh);
@@ -64,7 +72,8 @@ void comm_init(uint32_t inbox_size) {
 }
 
 void comm_deinit(void) {
-  if (s_blob) { free(s_blob); s_blob = NULL; }
+  if (s_blob)    { free(s_blob);    s_blob    = NULL; }
+  if (s_al_blob) { free(s_al_blob); s_al_blob = NULL; }
 }
 
 // ─── Callback setters ─────────────────────────────────────────────────────────
@@ -214,7 +223,7 @@ void comm_inbox_received(DictionaryIterator *iter) {
       case DATA_TYPE_STATIONS_CHUNK:    prv_handle_stations_chunk(iter);   return;
       case DATA_TYPE_ARRIVALS:          prv_handle_arrivals(iter);         return;
       case DATA_TYPE_ALERTS_SUMMARY:    prv_handle_alerts_summary(iter);   return;
-      case DATA_TYPE_ALERT_DETAIL:      prv_handle_alert_detail(iter);     return;
+      case DATA_TYPE_ALERT_DETAIL_CHUNK: prv_handle_alert_detail_chunk(iter); return;
       case DATA_TYPE_FAVORITES_REQUEST: prv_handle_favorites_request();    return;
       case DATA_TYPE_RENAME_FAVORITE:   prv_handle_rename_favorite(iter);  return;
       default:
@@ -295,10 +304,14 @@ static void prv_handle_stations_chunk(DictionaryIterator *iter) {
     return;
   }
 
-  if (s_blob_used + data_len <= 16384) {
-    memcpy(s_blob + s_blob_used, data, data_len);
-    s_blob_used += data_len;
+  if (s_blob_used + data_len > 16384) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] chunk overflow: used=%lu len=%u",
+            (unsigned long)s_blob_used, data_len);
+    free(s_blob); s_blob = NULL;
+    return;
   }
+  memcpy(s_blob + s_blob_used, data, data_len);
+  s_blob_used += data_len;
   s_recv_chunks++;
 
   APP_LOG(APP_LOG_LEVEL_INFO, "[comm] chunk %u/%u (%u bytes, total_so_far=%lu)",
@@ -384,14 +397,16 @@ static void prv_handle_favorites_request(void) {
   int off = 0;
 
   buf[off++] = '[';
-  for (uint8_t i = 0; i < count && off < (int)sizeof(buf) - 80; i++) {
+  for (uint8_t i = 0; i < count; i++) {
     Favorite *f = state_get_favorite(i);
     if (!f) continue;
-    if (i > 0 && off < (int)sizeof(buf) - 1) buf[off++] = ',';
-    int n = snprintf(buf + off, sizeof(buf) - (size_t)off,
-                     "{\"i\":%u,\"s\":\"%s\",\"n\":\"%s\"}",
+    char entry[128]; // max: comma + {"i":127,"s":"<39>","n":"<23>"} ≈ 87 bytes
+    int n = snprintf(entry, sizeof(entry), "%s{\"i\":%u,\"s\":\"%s\",\"n\":\"%s\"}",
+                     off > 1 ? "," : "",
                      (unsigned)i, f->station_slug, f->name);
-    if (n < 0 || (size_t)n >= sizeof(buf) - (size_t)off) break;
+    if (n <= 0 || n >= (int)sizeof(entry)) break; // entry too long (shouldn't happen)
+    if (off + n + 2 > (int)sizeof(buf)) break;     // won't fit with trailing ']' + '\0'
+    memcpy(buf + off, entry, (size_t)n);
     off += n;
   }
   if (off < (int)sizeof(buf) - 1) buf[off++] = ']';
@@ -457,15 +472,14 @@ sum_done:
   if (s_al_sum_cb) s_al_sum_cb(&cache);
 }
 
-static void prv_handle_alert_detail(DictionaryIterator *iter) {
-  Tuple *pl = dict_find(iter, MESSAGE_KEY_PAYLOAD);
-  if (!pl) return;
-  const uint8_t *p   = pl->value->data;
-  const uint8_t *end = p + pl->length;
-  uint8_t alert_count, i, hl, hcopy, dl, dcopy;
+static void prv_parse_alert_detail(const uint8_t *data, size_t len) {
+  const uint8_t *p   = data;
+  const uint8_t *end = data + len;
+  uint8_t  alert_count, i, hl, hcopy;
+  uint16_t dl, dcopy;
   AlertEntry *e;
 
-  // Parse directly into global — AlertDetailCache is ~1.9KB; putting it on the
+  // Parse directly into global — AlertDetailCache is ~8KB; putting it on the
   // stack blows the Pebble app stack and crashes with PC:0 LR:0.
   AlertDetailCache *cache = state_get_alert_detail();
   memset(cache, 0, sizeof(*cache));
@@ -481,10 +495,11 @@ static void prv_handle_alert_detail(DictionaryIterator *iter) {
     hcopy = hl < sizeof(e->header) - 1 ? hl : (uint8_t)(sizeof(e->header) - 1);
     memcpy(e->header, p, hcopy); e->header[hcopy] = 0;
     p += hl;
-    if (p >= end) break;
-    dl = *p++;
+    if (p + 1 >= end) break;
+    dl  = (uint16_t)*p++;
+    dl |= (uint16_t)*p++ << 8;
     if (p + dl > end) break;
-    dcopy = dl < sizeof(e->desc) - 1 ? dl : (uint8_t)(sizeof(e->desc) - 1);
+    dcopy = dl < sizeof(e->desc) - 1 ? (uint16_t)dl : (uint16_t)(sizeof(e->desc) - 1);
     memcpy(e->desc, p, dcopy); e->desc[dcopy] = 0;
     p += dl;
     cache->count++;
@@ -495,6 +510,53 @@ det_done:
   cache->route[sizeof(cache->route) - 1] = 0;
   APP_LOG(APP_LOG_LEVEL_INFO, "[comm] alert_detail: %d alerts", (int)cache->count);
   if (s_al_det_cb) s_al_det_cb(cache);
+}
+
+static void prv_handle_alert_detail_chunk(DictionaryIterator *iter) {
+  Tuple *ci = dict_find(iter, MESSAGE_KEY_CHUNK_INDEX);
+  Tuple *ct = dict_find(iter, MESSAGE_KEY_CHUNK_TOTAL);
+  Tuple *pl = dict_find(iter, MESSAGE_KEY_PAYLOAD);
+  if (!ci || !ct || !pl) return;
+
+  uint16_t chunk_index = ci->value->uint16;
+  uint16_t chunk_total = ct->value->uint16;
+  const uint8_t *data  = pl->value->data;
+  uint16_t data_len    = pl->length;
+
+  if (chunk_index == 0) {
+    if (s_al_blob) free(s_al_blob);
+    s_al_blob = malloc(9216);
+    s_al_blob_used    = 0;
+    s_al_total_chunks = chunk_total;
+    s_al_recv_chunks  = 0;
+    APP_LOG(APP_LOG_LEVEL_INFO, "[comm] al_chunk alloc: total=%u buf=%s",
+            chunk_total, s_al_blob ? "OK" : "FAILED");
+  }
+
+  if (!s_al_blob) return;
+  if (chunk_index != s_al_recv_chunks) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] al_chunk out-of-order: got=%u expected=%u",
+            chunk_index, s_al_recv_chunks);
+    return;
+  }
+
+  if (s_al_blob_used + data_len > 9216) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "[comm] al_chunk overflow: used=%lu len=%u",
+            (unsigned long)s_al_blob_used, data_len);
+    free(s_al_blob); s_al_blob = NULL;
+    return;
+  }
+  memcpy(s_al_blob + s_al_blob_used, data, data_len);
+  s_al_blob_used += data_len;
+  s_al_recv_chunks++;
+
+  APP_LOG(APP_LOG_LEVEL_INFO, "[comm] al_chunk %u/%u (%u B, total=%lu)",
+          chunk_index + 1, chunk_total, data_len, (unsigned long)s_al_blob_used);
+
+  if (s_al_recv_chunks == s_al_total_chunks) {
+    prv_parse_alert_detail(s_al_blob, s_al_blob_used);
+    free(s_al_blob); s_al_blob = NULL;
+  }
 }
 
 // ─── Arrivals payload parser ──────────────────────────────────────────────────

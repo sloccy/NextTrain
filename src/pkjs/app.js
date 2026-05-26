@@ -9,7 +9,8 @@ var OP = { GET_STATIONS_VERSION: 1, GET_STATIONS_FULL: 2,
            GET_ALERTS_SUMMARY: 5, GET_ALERT_DETAIL: 6 };
 var DATA_TYPE = { STATIONS_VERSION: 1, STATIONS_CHUNK: 2, ARRIVALS: 3,
                   ALERTS_SUMMARY: 4, ALERT_DETAIL: 5,
-                  FAVORITES_REQUEST: 6, FAVORITES_LIST: 7, RENAME_FAVORITE: 8 };
+                  FAVORITES_REQUEST: 6, FAVORITES_LIST: 7, RENAME_FAVORITE: 8,
+                  ALERT_DETAIL_CHUNK: 9 };
 var STATUS    = { OK: 0, OFFLINE: 1, NO_DATA: 2, ERROR: 3 };
 
 // Pending callback waiting for a FAVORITES_LIST response from the watch
@@ -59,7 +60,7 @@ function fetchStations(cb) {
   console.log('[pkjs] stations XHR GET ' + url);
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
-  try { xhr.setRequestHeader('User-Agent', 'NextTrain/1.1'); } catch (e) {}
+  try { xhr.setRequestHeader('User-Agent', 'NextTrain/1.1'); } catch (_e) { /* blocked by some runtimes */ }
   xhr.responseType = 'arraybuffer';
   xhr.timeout = 10000;
   xhr.onload = function() {
@@ -155,7 +156,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
 
       var xhr = new XMLHttpRequest();
       xhr.open('GET', url, true);
-      try { xhr.setRequestHeader('User-Agent', 'NextTrain/1.1'); } catch (e) {}
+      try { xhr.setRequestHeader('User-Agent', 'NextTrain/1.1'); } catch (_e) { /* blocked by some runtimes */ }
       xhr.responseType = 'arraybuffer';
       xhr.timeout = 8000;
 
@@ -170,7 +171,6 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
 
         var nextRefresh = parseInt(xhr.getResponseHeader('X-Next-Refresh') || '0', 10);
         var resBin = new Uint8Array(xhr.response);
-        
         // Decode lean binary: [count] × ([route lpStr][dir u8][time_mins u16][status_s8])
         // Watch format:       [count] × ([r,g,b][route lpStr][headsign lpStr][u16 mins BE][s8 st])
         var pos = 0;
@@ -188,7 +188,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
             var slug = '';
             for (var j = 0; j < slen; j++) slug += String.fromCharCode(b[p++]);
             var rCount = b[p++];
-            for (var j = 0; j < rCount; j++) {
+            for (var ri = 0; ri < rCount; ri++) {
               var r = b[p], g = b[p+1], b_ = b[p+2]; p += 3;
               var rlen = b[p++];
               var rName = '';
@@ -196,8 +196,8 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
               var dir = String.fromCharCode(b[p++]);
               var hlen = b[p++];
               var headsign = '';
-              for (var k = 0; k < hlen; k++) headsign += String.fromCharCode(b[p++]);
-              
+              for (var ki = 0; ki < hlen; ki++) headsign += String.fromCharCode(b[p++]);
+
               if (slug === stationSlug) {
                 lookup[rName + '.' + dir] = { r: r, g: g, b: b_, h: headsign };
               }
@@ -216,7 +216,7 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
 
           var atStopLen = resBin[pos++];
           var atStop = '';
-          for (var j = 0; j < atStopLen; j++) atStop += String.fromCharCode(resBin[pos++]);
+          for (var ai = 0; ai < atStopLen; ai++) atStop += String.fromCharCode(resBin[pos++]);
 
           var static_ = lookup[route + '.' + dir] || { r: 128, g: 128, b: 128, h: '' };
 
@@ -301,7 +301,7 @@ function handleGetAlertDetail(routeName) {
 
     xhr.onload = function() {
       if (xhr.status === 404) {
-        sendDict({ DATA_TYPE: DATA_TYPE.ALERT_DETAIL, PAYLOAD: [0] }, drain); return;
+        sendChunked([0]); return;
       }
       if (xhr.status < 200 || xhr.status >= 300) {
         sendStatus(0, STATUS.ERROR); drain(); return;
@@ -321,26 +321,45 @@ function handleGetAlertDetail(routeName) {
 
         var dlen = bin[pos++] | (bin[pos++] << 8);
         var desc = '';
-        for (var j = 0; j < dlen; j++) desc += String.fromCharCode(bin[pos++]);
+        for (j = 0; j < dlen; j++) desc += String.fromCharCode(bin[pos++]);
 
-        // Truncate and encode as lpStr (u8 len + bytes)
+        // Header: 1-byte length prefix, capped at 80
         var hb = [];
-        for (var j = 0; j < Math.min(header.length, 80); j++) hb.push(header.charCodeAt(j) & 0xFF);
+        for (j = 0; j < Math.min(header.length, 80); j++) hb.push(header.charCodeAt(j) & 0xFF);
         payload.push(hb.length);
-        for (var j = 0; j < hb.length; j++) payload.push(hb[j]);
+        for (j = 0; j < hb.length; j++) payload.push(hb[j]);
 
+        // Desc: 2-byte LE length prefix, capped at 1024 (word boundary)
         var descTrunc = desc;
-        if (desc.length > 160) {
-          var cut = desc.lastIndexOf(' ', 159);
-          descTrunc = desc.slice(0, cut > 0 ? cut : 160);
+        if (desc.length > 1024) {
+          var cut = desc.lastIndexOf(' ', 1023);
+          descTrunc = desc.slice(0, cut > 0 ? cut : 1024);
         }
         var db = [];
-        for (var j = 0; j < descTrunc.length; j++) db.push(descTrunc.charCodeAt(j) & 0xFF);
-        payload.push(db.length);
-        for (var j = 0; j < db.length; j++) payload.push(db[j]);
+        for (j = 0; j < descTrunc.length; j++) db.push(descTrunc.charCodeAt(j) & 0xFF);
+        payload.push(db.length & 0xFF);
+        payload.push((db.length >> 8) & 0xFF);
+        for (j = 0; j < db.length; j++) payload.push(db[j]);
       }
 
-      sendDict({ DATA_TYPE: DATA_TYPE.ALERT_DETAIL, PAYLOAD: payload }, drain);
+      sendChunked(payload);
+
+      function sendChunked(buf) {
+        var CHUNK = 1848; // 2048 inbox minus ~200 AppMessage framing overhead
+        var total = Math.ceil(buf.length / CHUNK) || 1;
+        var idx = 0;
+        function sendChunk() {
+          if (idx >= total) { drain(); return; }
+          var i = idx++;
+          sendDict({
+            DATA_TYPE:   DATA_TYPE.ALERT_DETAIL_CHUNK,
+            CHUNK_INDEX: i,
+            CHUNK_TOTAL: total,
+            PAYLOAD:     buf.slice(i * CHUNK, Math.min((i + 1) * CHUNK, buf.length)),
+          }, sendChunk);
+        }
+        sendChunk();
+      }
     };
     xhr.onerror   = function() { sendStatus(0, STATUS.OFFLINE); drain(); };
     xhr.ontimeout = function() { sendStatus(0, STATUS.OFFLINE); drain(); };
@@ -361,7 +380,7 @@ function handleRefreshStations() {
   console.log('[pkjs] handleRefreshStations: invalidating cache');
   enqueue(function() {
     stationsModule.invalidate();
-    fetchStations(function(err, data) {
+    fetchStations(function(err, _data) {
       if (err) {
         console.error('[pkjs] refresh: stations fetch error: ' + err.message);
         sendStatus(0, STATUS.OFFLINE); drain(); return;
@@ -437,7 +456,7 @@ Pebble.addEventListener('webviewclosed', function(e) {
   var changes;
   try {
     changes = JSON.parse(decodeURIComponent(e.response));
-  } catch(err) {
+  } catch (_err) {
     return;
   }
   if (!Array.isArray(changes) || changes.length === 0) return;

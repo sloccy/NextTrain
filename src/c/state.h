@@ -60,7 +60,7 @@ typedef struct {
 #define MAX_ALERT_ROUTES     16
 #define MAX_ALERTS_PER_ROUTE  8
 #define ALERT_HEADER_LEN     80
-#define ALERT_DESC_LEN      160
+#define ALERT_DESC_LEN     1024
 
 typedef struct {
   char    name[4];

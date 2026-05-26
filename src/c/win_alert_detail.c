@@ -5,8 +5,8 @@
 #include <stdio.h>
 
 // Maximum characters in the assembled alert text buffer.
-// 8 alerts × (80 header + 160 desc + separators) ≈ 2.2KB
-#define TEXT_BUF_SIZE 2400
+// 8 alerts × (80 header + 1024 desc + separators) ≈ 9.0KB
+#define TEXT_BUF_SIZE 9200
 
 static Window      *s_window;
 static ScrollLayer *s_scroll;
