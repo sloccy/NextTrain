@@ -90,7 +90,7 @@ function loadOrFetchStations(cb) {
 function handleGetStationsVersion() {
   console.log('[pkjs] handleGetStationsVersion');
   enqueue(function() {
-    loadOrFetchStations(function(err, data) {
+    fetchStations(function(err, data) {
       if (err) {
         console.error('[pkjs] stations load/fetch error: ' + err.message);
         sendStatus(0, STATUS.OFFLINE); drain(); return;
