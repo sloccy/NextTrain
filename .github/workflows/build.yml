@@ -1,0 +1,66 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y nodejs npm libsdl2-2.0-0 libglib2.0-0 libpixman-1-0 zlib1g libsndio7.0
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install pebble-tool
+        run: uv tool install pebble-tool --python 3.13
+
+      - name: Resolve latest SDK version
+        id: sdk
+        run: |
+          mkdir -p ~/.pebble-sdk && touch ~/.pebble-sdk/NO_TRACKING
+          VERSION=$(pebble sdk list --all 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Cache Pebble SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: ~/.pebble-sdk
+          key: pebble-sdk-${{ steps.sdk.outputs.version }}
+
+      - name: Install Pebble SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: pebble sdk install ${{ steps.sdk.outputs.version }}
+
+      - name: Activate SDK
+        run: pebble sdk activate ${{ steps.sdk.outputs.version }}
+
+      - name: Build
+        run: pebble build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NextTrain.pbw
+          path: build/NextTrain.pbw
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            build/NextTrain.pbw \
+            --title "NextTrain ${{ github.ref_name }}" \
+            --generate-notes
