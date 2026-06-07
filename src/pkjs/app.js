@@ -214,10 +214,6 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
           var mins = (resBin[pos++] << 8) | resBin[pos++];
           var status = new Int8Array([resBin[pos++]])[0];
 
-          var atStopLen = resBin[pos++];
-          var atStop = '';
-          for (var ai = 0; ai < atStopLen; ai++) atStop += String.fromCharCode(resBin[pos++]);
-
           var static_ = lookup[route + '.' + dir] || { r: 128, g: 128, b: 128, h: '' };
 
           finalBuf.push(static_.r, static_.g, static_.b);
@@ -225,7 +221,6 @@ function handleGetArrivals(queryIndex, stationSlug, routesStr) {
           lpStrWatch(finalBuf, static_.h, 24);
           finalBuf.push((mins >> 8) & 0xFF, mins & 0xFF);
           finalBuf.push(status & 0xFF);
-          lpStrWatch(finalBuf, atStop, 32);
         }
 
         sendDict({

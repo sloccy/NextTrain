@@ -45,7 +45,6 @@ typedef struct {
   char          headsign[25];
   uint16_t      mins;  // backend minute-of-day (0..1439)
   int8_t        st;    // status sentinel/delta; see format_status_label()
-  char          at_stop[32]; // station slug of current vehicle, or ""
 } ArrivalEntry;
 
 typedef struct {
