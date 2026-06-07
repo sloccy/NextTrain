@@ -9,14 +9,14 @@
 // Station picker header
 static Layer *s_sta_header_layer;
 static void prv_sta_draw_header(Layer *layer, GContext *ctx) {
-  ui_draw_screen_header(ctx, layer_get_bounds(layer), "Stations", false);
+  ui_draw_screen_header(ctx, layer_get_bounds(layer), "Stations", false, NULL);
 }
 
 // Route picker header (title set from slug at window-load time)
 static Layer *s_rte_header_layer;
 static char   s_rte_header_title[40];
 static void prv_rte_draw_screen_header(Layer *layer, GContext *ctx) {
-  ui_draw_screen_header(ctx, layer_get_bounds(layer), s_rte_header_title, false);
+  ui_draw_screen_header(ctx, layer_get_bounds(layer), s_rte_header_title, false, NULL);
 }
 
 // ─── Station Picker ───────────────────────────────────────────────────────────

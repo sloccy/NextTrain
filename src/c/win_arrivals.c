@@ -82,6 +82,7 @@ static void prv_status_received(uint8_t query_index, CommStatus status) {
 // ─── Minute tick (live countdown) ────────────────────────────────────────────
 
 static void prv_tick(struct tm *tt, TimeUnits u) {
+  if (s_header_layer) layer_mark_dirty(s_header_layer);
   if (s_menu) layer_mark_dirty(menu_layer_get_layer(s_menu));
 }
 
@@ -91,7 +92,9 @@ static void prv_draw_header(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   char display_name[40];
   slug_to_display(s_params.station_slug, display_name, sizeof(display_name));
-  ui_draw_screen_header(ctx, bounds, display_name, s_params.from_favorite);
+  char time_buf[10];
+  format_wall_time(format_now_minute_of_day(), time_buf, sizeof(time_buf));
+  ui_draw_screen_header(ctx, bounds, display_name, s_params.from_favorite, time_buf);
 }
 
 // ─── MenuLayer callbacks ──────────────────────────────────────────────────────

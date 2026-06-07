@@ -37,5 +37,7 @@ void ui_format_routes(const Favorite *fav, char *buf, size_t buf_size);
 
 // Draw the editorial screen header: white fill, title left-aligned in
 // GOTHIC_18_BOLD, optional ★ glyph right-aligned, 2 px solid black bottom rule.
+// time_str: if non-NULL, shown right-aligned in GOTHIC_14_BOLD (e.g. "3:45p").
 void ui_draw_screen_header(GContext *ctx, GRect bounds,
-                            const char *title, bool star);
+                            const char *title, bool star,
+                            const char *time_str);

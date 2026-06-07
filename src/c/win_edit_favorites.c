@@ -12,7 +12,7 @@ static ActionMenu   *s_action_menu;
 static uint8_t       s_selected_row;
 
 static void prv_draw_header_layer(Layer *layer, GContext *ctx) {
-  ui_draw_screen_header(ctx, layer_get_bounds(layer), "Edit Favorites", false);
+  ui_draw_screen_header(ctx, layer_get_bounds(layer), "Edit Favorites", false, NULL);
 }
 
 // ─── ActionMenu ───────────────────────────────────────────────────────────────

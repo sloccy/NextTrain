@@ -310,22 +310,34 @@ GColor ui_gcolor_from_rgb(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void ui_draw_screen_header(GContext *ctx, GRect bounds,
-                            const char *title, bool star) {
+                            const char *title, bool star,
+                            const char *time_str) {
   graphics_context_set_fill_color(ctx, GColorWhite);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
-  int16_t title_w = bounds.size.w - NT_PADDING_X - (star ? 22 : NT_PADDING_X);
+  // Right-side reservation: star=20px, time=40px, trailing padding=4px
+  int16_t right_w = (star ? 20 : 0) + (time_str ? 40 : 0) + NT_PADDING_X / 2;
+  int16_t title_w = bounds.size.w - NT_PADDING_X - right_w;
   graphics_context_set_text_color(ctx, GColorBlack);
   graphics_draw_text(ctx, title,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(NT_PADDING_X, 2, title_w, bounds.size.h - 4),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
+  int16_t right_x = bounds.size.w;
   if (star) {
+    right_x -= 20;
     graphics_draw_text(ctx, "\xe2\x98\x85",
                        fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(bounds.size.w - 22, (bounds.size.h - 16) / 2, 18, 16),
+                       GRect(right_x, (bounds.size.h - 16) / 2, 18, 16),
                        GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  }
+  if (time_str) {
+    right_x -= 40;
+    graphics_draw_text(ctx, time_str,
+                       fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(right_x, (bounds.size.h - 16) / 2, 40, 16),
+                       GTextOverflowModeFill, GTextAlignmentRight, NULL);
   }
 
   graphics_context_set_fill_color(ctx, GColorBlack);

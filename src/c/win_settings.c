@@ -14,7 +14,7 @@ static bool       s_refreshing;
 static AppTimer  *s_watchdog;
 
 static void prv_draw_header_layer(Layer *layer, GContext *ctx) {
-  ui_draw_screen_header(ctx, layer_get_bounds(layer), "Settings", false);
+  ui_draw_screen_header(ctx, layer_get_bounds(layer), "Settings", false, NULL);
 }
 
 static void prv_cancel_watchdog(const char *why) {
