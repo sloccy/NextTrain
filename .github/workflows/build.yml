@@ -29,7 +29,7 @@ jobs:
         id: sdk
         run: |
           mkdir -p ~/.pebble-sdk && touch ~/.pebble-sdk/NO_TRACKING
-          VERSION=$(pebble sdk list --all 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+          VERSION=$(pebble sdk list 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Cache Pebble SDK
