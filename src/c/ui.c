@@ -300,7 +300,13 @@ int16_t ui_draw_favorite_icon(GContext *ctx, GPoint origin,
 }
 
 GColor ui_gcolor_from_rgb(uint8_t r, uint8_t g, uint8_t b) {
-  return GColorFromRGB(r, g, b);
+  // GColorFromRGB truncates to top 2 bits; pre-round to nearest palette value
+  // (0, 85, 170, 255) so colors aren't systematically darker than intended.
+  return GColorFromRGB(
+    r < 43 ? 0 : r < 128 ? 85 : r < 213 ? 170 : 255,
+    g < 43 ? 0 : g < 128 ? 85 : g < 213 ? 170 : 255,
+    b < 43 ? 0 : b < 128 ? 85 : b < 213 ? 170 : 255
+  );
 }
 
 void ui_draw_screen_header(GContext *ctx, GRect bounds,
